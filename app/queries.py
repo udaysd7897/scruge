@@ -47,6 +47,12 @@ def ladder(src: SourceProduct, platform: Platform) -> list[str]:
     elif cat == Category.SNEAKER:
         rungs.append(_join(c.brand, c.family, c.base_colour))
     elif cat == Category.APPAREL:
+        # the brand's own product name is what Myntra lists and Flipkart shows: search it first
+        if c.official_name:
+            rungs.append(_join(c.brand, c.official_name, c.base_colour))
+            rungs.append(_join(c.brand, c.official_name))
+        if c.model_name:
+            rungs.append(_join(c.brand, c.model_name, c.base_colour, "t-shirt"))
         base = _join(c.brand, c.product_type, c.base_colour)
         if base:
             extra = _distinct_in_order(c.title or src.title, c.brand)

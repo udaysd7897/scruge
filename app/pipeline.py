@@ -5,6 +5,7 @@ from collections.abc import AsyncIterator
 from dataclasses import asdict
 from enum import Enum
 
+from app.brandsite import official_name
 from app.llm import llm_tiebreak
 from app.matcher import Match, decide, resolve_tie, to_result
 from app.models import Candidate, Category, Decision, FetchStatus, Outcome, Platform, PlatformResult, SourceProduct
@@ -97,6 +98,12 @@ async def check(url: str) -> AsyncIterator[dict]:
             yield {"type": "error", "message": str(e)}
             yield {"type": "done"}
             return
+        if src.category == Category.APPAREL and src.canon.style_code:
+            try:
+                src.canon.official_name = await asyncio.wait_for(
+                    official_name(client, src.canon.brand, src.canon.style_code), 10)
+            except Exception:
+                pass  # no official name: the ladder falls back to Amazon's title
         yield {"type": "source", "data": _plain(src)}
         platforms = PLATFORMS.get(src.category)
         if not platforms:

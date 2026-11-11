@@ -51,6 +51,7 @@ class Canonical:
     base_colour: str | None = None
     style_code: str | None = None  # brand style/article code (Puma 52885601, Nike HJ5228-101)
     model_name: str | None = None  # brand's line name when the listing states it ("tad essential")
+    official_name: str | None = None  # brand-site product name looked up by style code
     product_type: str | None = None
     pack_count: int = 1
     ean: str | None = None
