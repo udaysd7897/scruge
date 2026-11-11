@@ -61,7 +61,7 @@ ACCESSORY_PATTERNS = [re.compile(p) for p in (
 GENDER_WORDS = {"men", "mens", "women", "womens", "boys", "boy", "girls", "girl", "unisex", "kids", "man", "woman"}
 PRODUCT_TYPE_WORDS = {"t-shirt", "tshirt", "tee", "polo", "jersey", "shirt", "shoes", "shoe", "sneakers", "sneaker"}
 SIZE_WORDS = {"xs", "s", "m", "l", "xl", "xxl", "xxxl", "2xl", "3xl", "4xl", "size"}
-FILLER_WORDS = {"pure", "cotton", "round", "neck", "half", "full", "sleeve", "sleeves", "casual", "solid",
+FILLER_WORDS = {"pure", "cotton", "round", "neck", "collar", "half", "full", "sleeve", "sleeves", "casual", "solid",
                 "and", "with", "for", "of", "in", "the", "a"}
 
 
@@ -225,6 +225,17 @@ def tv_family(title: str | None, brand: str | None) -> str | None:
     return " ".join(toks) or None
 
 
+# measurements and shoe sizes: "256gb", "55 inch", "uk 8", "size 9", then "8 uk" (a second pass,
+# so "Air Max 270 UK 8" loses "UK 8", not "270 UK")
+_UNITS_AND_SIZES = re.compile(
+    r"\d+(?:\.\d+)?[\s-]*(?:gb|tb|inch|inches|cm|mm|ml|kg)\b|\buk\s*\d+(?:\.\d+)?\b|\bsize\s*\d+(?:\.\d+)?\b")
+_SIZE_THEN_UK = re.compile(r"\b\d+(?:\.\d+)?\s*uk\b")
+
+
+def _strip_sizes(t: str) -> str:
+    return _SIZE_THEN_UK.sub(" ", _UNITS_AND_SIZES.sub(" ", t))
+
+
 def is_accessory(title: str) -> bool:
     t = (title or "").lower()
     if set(re.findall(r"[a-z0-9]+", t)) & ACCESSORY_TOKENS:
@@ -235,7 +246,7 @@ def is_accessory(title: str) -> bool:
 def distinctive_words(title: str, brand: str | None) -> set[str]:
     t = (title or "").lower().replace("t-shirt", "tshirt")
     t = re.sub(r"pack of \d+|\d+\s*-?\s*pack|\bpack\b", " ", t)
-    t = re.sub(r"\d+(?:\.\d+)?[\s-]*(?:gb|tb|inch|inches|cm|mm|ml|kg)\b|\buk\s*\d+\b", " ", t)
+    t = _strip_sizes(t)
     drop = set(GENDER_WORDS) | PRODUCT_TYPE_WORDS | SIZE_WORDS | FILLER_WORDS | set(COLOUR_SYNONYMS)
     for b in (brand, norm_brand(brand)):
         if b:
@@ -245,7 +256,8 @@ def distinctive_words(title: str, brand: str | None) -> set[str]:
 
 DESCRIPTOR_WORDS = {"running", "road", "sports", "sport", "casual", "training", "walking", "lifestyle",
                     "textile", "mesh", "lace", "up", "slip", "on", "lace-up", "slip-on", "shoes", "sneakers",
-                    "tshirts", "tshirt", "shirts", "polos", "jerseys", "tees"}
+                    "tshirts", "tshirt", "shirts", "polos", "jerseys", "tees", "tennis", "basketball",
+                    "skateboarding", "skate", "trainers", "trainer", "athleisure", "outdoor"}
 
 
 def model_line(title: str, brand: str | None) -> str | None:
@@ -253,7 +265,7 @@ def model_line(title: str, brand: str | None) -> str | None:
     t = (title or "").lower().replace("\u2019", "'")
     t = re.sub(r"'s\b", "", t).replace("t-shirt", "tshirt")
     t = re.sub(r"pack of \d+|\d+\s*-?\s*pack|\bpack\b", " ", t)
-    t = re.sub(r"\d+(?:\.\d+)?[\s-]*(?:gb|tb|inch|inches|cm|mm|ml|kg)\b|\buk\s*\d+\b", " ", t)
+    t = _strip_sizes(t)
     drop = (set(GENDER_WORDS) | PRODUCT_TYPE_WORDS | SIZE_WORDS | FILLER_WORDS | DESCRIPTOR_WORDS
             | set(COLOUR_SYNONYMS))
     for b in (brand, norm_brand(brand)):

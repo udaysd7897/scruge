@@ -120,7 +120,8 @@ def from_amazon(item: dict) -> SourceProduct:
     raw_brand = item.get("brand") or at.get("Brand Name")
     code = _amazon_tv_code(at, screen_inches(title)) if cat == Category.TV else None
     if cat in (Category.SNEAKER, Category.APPAREL):
-        family = model_line(title.split("(")[0], raw_brand)
+        # model line ends at the first "(", "," or "|" ("..., Black/White-Anthracite, 8 UK")
+        family = model_line(re.split(r"[(,|]", title)[0], raw_brand)
     elif cat == Category.TV:
         # TV titles open with the size ("LG 139 cms (55 inches) NU87 ...") and series names differ
         # per store (Croma "NU870B", Flipkart's Model Name is the code): identify by model number,

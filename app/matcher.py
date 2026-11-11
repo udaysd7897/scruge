@@ -9,8 +9,8 @@ from rapidfuzz import fuzz
 from app.extract import REQUIRED, missing_required
 from app.models import (Candidate, Canonical, Category, Decision, FetchStatus, Outcome, Platform,
                         PlatformResult, SourceProduct)
-from app.normalize import (base_colour, clean_ean, colour_key, distinctive_words, is_accessory, model_base,
-                           norm_brand, pack_count)
+from app.normalize import (DESCRIPTOR_WORDS, base_colour, clean_ean, colour_key, distinctive_words, is_accessory,
+                           model_base, norm_brand, pack_count)
 
 
 def _fmt(x) -> str:
@@ -28,7 +28,9 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
     sb, cb = norm_brand(src.brand), norm_brand(c.brand)
     if _both(sb, cb) and sb != cb:
         return "brand"
-    if src.family and c.family and src.family != c.family:
+    # sneaker/apparel model lines are worded differently per store ("Grand Court 3.0 Sneaker" vs
+    # "Grand Court 3.0 Tennis Shoes"): they rely on the distinctive-word veto below instead
+    if src.family and c.family and src.family != c.family and cat not in (Category.SNEAKER, Category.APPAREL):
         if cat != Category.TV or not _tv_family_overlap(src.family, c.family, cand.title):
             return "family"
     sm, cm = model_base(src.model_code), model_base(c.model_code)
@@ -59,6 +61,25 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
     return None
 
 
+def _doubt(src: Canonical, cand: Candidate, cat: Category) -> str | None:
+    """Why a sneaker/apparel survivor can't be confirmed even though no veto applies (§ anti-goal:
+    a doubtful survivor is shown as "Possible match", never as a confident one)."""
+    if cat not in (Category.SNEAKER, Category.APPAREL):
+        return None
+    if cat == Category.SNEAKER and src.style_code and cand.canon.style_code:
+        return None  # style codes agreed in veto()
+    a, b = distinctive_words(src.title, src.brand), distinctive_words(cand.title, cand.canon.brand)
+    if not a or not b:
+        return "Title too generic to confirm the model"
+    # listing words the Amazon title never mentions ("Graphic Printed", "React"): a different design
+    src_toks = set(re.findall(r"[a-z0-9]+", (src.title or "").lower().replace("t-shirt", "tshirt")))
+    if b - src_toks - DESCRIPTOR_WORDS:
+        return "Listing title has words the Amazon title doesn't"
+    if cat == Category.SNEAKER and src.family and cand.canon.family and src.family != cand.canon.family:
+        return "Model name differs slightly on this listing"
+    return None
+
+
 def _tv_family_overlap(a: str, b: str, title: str) -> bool:
     """TV series names differ per store ("nu87 nano" / "nu870b" / "55nu870bpla"): compatible when a
     series word of one appears inside the other (or the candidate title)."""
@@ -76,9 +97,10 @@ def _distinct_veto(src: Canonical, cand: Candidate) -> bool:
         return False
     a = distinctive_words(src.title, src.brand)
     b = distinctive_words(cand.title, cand.canon.brand)
+    if not a or not b:
+        # one title is too generic to compare: not a veto; decide() caps it at "Possible match"
+        return False
     if a or b:
-        if not a or not b:
-            return True
         m = min(len(a), len(b))
         score = len(a & b) / (m if m >= 2 else len(a | b))
         if score < 0.5:
@@ -156,6 +178,13 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
             pool = unknown
         else:
             pool, fallback = other, True
+    doubt = None
+    if cat in (Category.SNEAKER, Category.APPAREL):
+        clear = [c for c in pool if _doubt(s, c, cat) is None]
+        if clear:
+            pool = clear
+        else:
+            doubt = _doubt(s, max(pool, key=lambda c: score(s, c, cat)), cat)
     scores = {id(c): score(s, c, cat) for c in pool}
     scored = sorted(pool, key=lambda c: -scores[id(c)])
     if fallback:
@@ -171,6 +200,9 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
     if src.missing_required:
         return Match(Decision.AMBIGUOUS, top, "Couldn't read " + _labels(src.missing_required) + " on Amazon",
                      fallback, pool, **base)
+    if doubt:
+        # before the tie check: the LLM tie-break must not turn a doubtful listing into a match
+        return Match(Decision.AMBIGUOUS, top, doubt, fallback, pool, **base)
     if len(scored) >= 2 and not fallback:
         if scores[id(top)] - scores[id(scored[1])] < MARGIN:
             group = [c for c in scored if scores[id(top)] - scores[id(c)] < MARGIN]
