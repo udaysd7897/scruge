@@ -55,6 +55,11 @@ uv run python scripts/golden.py --live          # full live run; spends Apify cr
 - **wrong match**: a confident answer that links a different product. It's printed loudly
   and makes the script exit non-zero.
 
+Cache-only mode is the `APIFY_OFFLINE=1` environment variable, which `golden.py` sets by
+default. With it set, a missing Apify cache entry is treated as an error ("Couldn't check")
+and no paid Apify call is made. Leave it **unset** when running the app (`./run.sh`).
+Otherwise any Amazon link or Croma search that isn't already cached fails.
+
 The caches live in `.cache/` (gitignored). Apify responses are in `.cache/apify/`, and the
 golden-only replays of Flipkart/Myntra pages and LLM picks are in `.cache/golden/`.
 
