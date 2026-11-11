@@ -55,6 +55,8 @@ def missing_required(c: Canonical, cat: Category) -> list[str]:
     for f in REQUIRED.get(cat, []):
         if getattr(c, f, None):
             continue
+        if cat == Category.PHONE and f == "ram_gb" and norm_brand(c.brand) == "apple":
+            continue  # Apple doesn't publish iPhone RAM; the RAM veto still applies when both sides show it
         if cat == Category.TV and f == "family" and c.model_code:
             continue
         out.append(f)
@@ -62,8 +64,10 @@ def missing_required(c: Canonical, cat: Category) -> list[str]:
 
 
 def _title_family(title: str, brand: str | None) -> str | None:
-    # family ends at the first "(", "|" or "," ("OnePlus 15 | 12GB+256GB | Infinite Black | ...")
-    head = re.split(r"[(|,]", title or "")[0]
+    # family ends at the first "(", "|", ",", ":" or " - " ("OnePlus 15 | 12GB+256GB | ...",
+    # "Apple iPhone 17 Pro 256 GB: 15.93 cm ...", "Apple iPhone 16 - Black"); sizes are not family
+    head = re.split(r"[(|,:]|\s[-–]\s", title or "")[0]
+    head = re.sub(r"\b\d+(?:\.\d+)?\s*(?:gb|tb)\b(?:\s*ram)?", " ", head, flags=re.I)
     if brand:
         head = re.sub(re.escape(brand), " ", head, count=1, flags=re.I)
     head = re.sub(r"\b(?:ai|smartphone|smart ?phone|mobile phone)\b", " ", head, flags=re.I)

@@ -39,7 +39,9 @@ def ladder(src: SourceProduct, platform: Platform) -> list[str]:
     if cat == Category.PHONE:
         ram = f"{c.ram_gb}gb" if c.ram_gb is not None else None
         storage = f"{c.storage_gb}gb" if c.storage_gb is not None else None
-        rungs.append(_join(c.brand, c.family, ram, storage, c.colour))
+        # build from the parts we have (iPhone listings carry no RAM): brand + family are the minimum
+        rungs.append(_join(c.brand, c.family) and " ".join(
+            p for p in (_join(c.brand, c.family), ram, storage, (c.colour or "").lower()) if p))
     elif cat == Category.TV:
         rungs.append(_join(c.brand, c.family or c.model_code, c.screen_in, "inch"))
     elif cat == Category.SNEAKER:

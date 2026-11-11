@@ -54,8 +54,10 @@ def test_ladder_phone():
 
 def test_ladder_skips_missing_parts_and_dedupes():
     s = phone_src()
-    s.canon.ram_gb = None
-    assert ladder(s, FLIPKART) == ["samsung galaxy s26 ultra"]
+    s.canon.ram_gb = None  # a missing part is skipped, not the whole rung
+    assert ladder(s, FLIPKART) == ["samsung galaxy s26 ultra 512gb black", "samsung galaxy s26 ultra"]
+    s.canon.ram_gb, s.canon.storage_gb, s.canon.colour = None, None, None
+    assert ladder(s, FLIPKART) == ["samsung galaxy s26 ultra"]  # deduped
 
 
 def test_ladder_tv_sneaker_apparel():

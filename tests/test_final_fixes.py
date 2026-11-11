@@ -282,3 +282,43 @@ async def test_flipkart_partial_block_with_exact_match_is_in_stock(_no_llm):
     async with _fk_client(pages) as client:
         r = await pipeline.run_platform(client, sp, FLIPKART)
     assert r.outcome == Outcome.IN_STOCK and "pid=MOB2" in r.url
+
+
+# ------------------------------------------------------------------ 4. iPhones (no RAM on Amazon)
+
+PHONE_CRUMBS = "Electronics > Mobiles & Accessories > Smartphones & Basic Mobiles > Smartphones"
+IPHONE = amz("Apple iPhone 17 Pro 256 GB: 15.93 cm (6.3″) Display with Promotion; A19 Pro Chip; Cosmic Orange",
+             "Apple", PHONE_CRUMBS, "Cosmic Orange")
+
+
+def test_iphone_source_without_ram():
+    sp = from_amazon(IPHONE)
+    assert (sp.canon.family, sp.canon.storage_gb, sp.canon.ram_gb) == ("iphone 17 pro", 256, None)
+    assert sp.missing_required == []
+    assert "apple iphone 17 pro 256gb cosmic orange" in ladder(sp, FLIPKART)
+
+
+def test_title_family_cuts():
+    from app.extract import _title_family
+    assert _title_family("Apple iPhone 16 (128 GB) - Black", "Apple") == "iphone 16"
+    assert _title_family("Apple iPhone 16 - Black", "Apple") == "iphone 16"
+    assert _title_family("Samsung Galaxy S25, 256GB", "Samsung") == "galaxy s25"
+
+
+def test_phone_ladder_skips_missing_ram_for_any_brand():
+    sp = from_amazon(amz("Samsung Galaxy S26 Ultra 5G (Black, 512GB Storage)", "Samsung", PHONE_CRUMBS, "Black"))
+    assert sp.canon.ram_gb is None and sp.missing_required == ["ram_gb"]
+    assert ladder(sp, FLIPKART)[0] == "samsung galaxy s26 ultra 512gb black"
+
+
+def test_iphone_matches_flipkart_listing_without_ram():
+    sp = from_amazon(IPHONE)
+    cands = (fk("Apple iPhone 17 Pro (Cosmic Orange, 256 GB)", "Apple", "MOBI1", Model_Name="iPhone 17 Pro",
+                Internal_Storage="256 GB", Color="Cosmic Orange")
+             + fk("Apple iPhone 17 Pro (Cosmic Orange, 512 GB)", "Apple", "MOBI2", Model_Name="iPhone 17 Pro",
+                  Internal_Storage="512 GB", Color="Cosmic Orange")
+             + fk("Apple iPhone 17 Pro Max (Cosmic Orange, 256 GB)", "Apple", "MOBI3", Model_Name="iPhone 17 Pro Max",
+                  Internal_Storage="256 GB", Color="Cosmic Orange"))
+    assert cands[0].canon.ram_gb is None
+    r = _e2e(sp, FLIPKART, cands)
+    assert r.outcome == Outcome.IN_STOCK and "pid=MOBI1" in r.url
