@@ -36,14 +36,28 @@ _ACCESSORY_CRUMB = re.compile(
     r"\b(?:cases?|covers?|accessor\w*|protectors?|chargers?|cables?|mounts?|stands?)\b", re.I)
 
 
+# leaf categories that sit under a supported parent but are not supported products
+_EXCLUDED_CRUMB = re.compile(
+    r"\bremotes?\b|\bsandals?\b|\bfloaters?\b|\bslippers?\b|\bflip[\s-]?flops?\b|\bsocks?\b", re.I)
+_TV_PARENT = re.compile(r"televisions?", re.I)  # "Home Theater, TV & Video" is not a TV category
+
+
 def detect_category(breadcrumbs: str | None, title: str) -> Category:
     if breadcrumbs:
-        leaf = re.split(r"\s*>\s*", breadcrumbs.strip())[-1]
-        if _ACCESSORY_CRUMB.search(leaf):
+        segs = [x for x in re.split(r"\s*>\s*", breadcrumbs.strip()) if x]
+        leaf = segs[-1] if segs else ""
+        if _ACCESSORY_CRUMB.search(leaf) or _EXCLUDED_CRUMB.search(leaf):
             return Category.UNSUPPORTED
-        for cat, rx in _CRUMB_RULES:
-            if rx.search(breadcrumbs):
-                return cat
+        # the leaf decides, then its parent ("... > Smartphones & Basic Mobiles > Basic Mobiles");
+        # never the whole path ("Clothing & Shoes > Polos" is not a shoe)
+        for i, seg in enumerate(reversed(segs[-2:])):
+            for cat, rx in _CRUMB_RULES:
+                if i == 1 and cat == Category.SNEAKER:
+                    continue  # sneakers need "shoes"/"sneakers" in the leaf
+                if i == 1 and cat == Category.TV:
+                    rx = _TV_PARENT
+                if rx.search(seg):
+                    return cat
     for cat, rx in _TITLE_RULES:
         if rx.search(title or ""):
             return cat
@@ -282,9 +296,9 @@ def from_myntra_search(html: str) -> list[Candidate]:
                           else product_type(name, None) or _MYNTRA_TYPES.get(art)),
             title=name,
         )
-        inv = p.get("inventoryInfo") or []
+        inv = [x for x in p.get("inventoryInfo") or [] if isinstance(x, dict)]
         out.append(Candidate(Platform.MYNTRA, "https://www.myntra.com/" + (p.get("landingPageUrl") or ""),
-                             name, canon, any(x.get("available") for x in inv),
+                             name, canon, any(x.get("available") for x in inv) if inv else None,
                              int(p["price"]) if p.get("price") is not None else None,
                              str(p.get("productId")) if p.get("productId") is not None else None))
     return out

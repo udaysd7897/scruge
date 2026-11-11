@@ -162,7 +162,7 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
 
     pool, fallback = survivors, False
     sk = colour_key(s.colour)
-    if cat in (Category.PHONE, Category.TV) and sk:
+    if cat == Category.PHONE and sk:  # spec §6.2: TV colour is ignored
         same = [c for c in survivors if colour_key(c.canon.colour) == sk]
         unknown = [c for c in survivors if colour_key(c.canon.colour) is None]
         other = [c for c in survivors if colour_key(c.canon.colour) not in (None, sk)]

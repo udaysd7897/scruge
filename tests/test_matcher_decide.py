@@ -182,6 +182,7 @@ def test_fix1_unknown_colour_with_other_colour_is_ambiguous():
 
 
 def test_fix1_tv_unknown_colour_only_uses_gap_rule():
+    # TV colour is ignored (spec §6.2): the better-identified listing wins on the normal rules
     tv = Canonical(brand="sony", family="bravia 3", model_code="K-55S30", screen_in=55, colour="Black",
                    title="Sony Bravia 3 55 inch K-55S30 Black")
     src = SourceProduct("u", "a", tv.title, None, Category.TV, tv)

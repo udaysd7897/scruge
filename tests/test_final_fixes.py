@@ -340,3 +340,69 @@ def test_pack_count_words_and_pieces():
     # the pack words themselves are not distinctive words
     assert distinctive_words("Puma Logo Polo Pack Of Two", "puma") == {"logo"}
     assert distinctive_words("Puma Logo Polo 2 pcs", "puma") == {"logo"}
+
+
+# ------------------------------------------------------------------ 7-11. minor
+
+def test_amazon_dp_url_without_scheme():
+    from app.sources.amazon import amazon_dp_url
+    assert amazon_dp_url("amazon.in/dp/B0GL8GXNTS") == "https://www.amazon.in/dp/B0GL8GXNTS"
+    assert amazon_dp_url("www.amazon.in/Samsung-Galaxy/dp/B0GL8GXNTS/ref=x") == "https://www.amazon.in/dp/B0GL8GXNTS"
+    assert amazon_dp_url("  www.amazon.in/gp/product/B0GL8GXNTS ") == "https://www.amazon.in/dp/B0GL8GXNTS"
+    assert amazon_dp_url("www.amazon.com/dp/B0GL8GXNTS") is None
+
+
+def test_detect_category_uses_leaf_segments():
+    from app.extract import detect_category
+    assert detect_category("Electronics > Home Theater, TV & Video > Remote Controls", "LG Smart TV Remote") \
+        == Category.UNSUPPORTED
+    assert detect_category("Fashion > Men > Shoes > Sandals & Floaters", "Sparx Men's Floaters") == Category.UNSUPPORTED
+    assert detect_category("Shoes & Handbags > Men's Shoes > Flip-Flops & Slippers", "Crocs Slipper Shoes") \
+        == Category.UNSUPPORTED
+    assert detect_category("Clothing & Accessories > Men > Socks", "Puma Sneaker Socks") == Category.UNSUPPORTED
+    assert detect_category("Clothing & Shoes > Polos", "Allen Solly Polo") == Category.APPAREL
+    assert detect_category("Electronics > Home Theater, TV & Video > Televisions > Smart Televisions", "x") == Category.TV
+    assert detect_category("Shoes & Handbags > Shoes > Men's Shoes > Sneakers", "x") == Category.SNEAKER
+    assert detect_category("Shoes & Handbags > Shoes > Men's Shoes > Sports Shoes > Running Shoes", "x") \
+        == Category.SNEAKER
+    assert detect_category("Clothing & Accessories > Men > T-Shirts & Polos > T-Shirts", "x") == Category.APPAREL
+
+
+def test_myntra_missing_inventory_is_unknown_stock():
+    prods = [{"productId": 1, "productName": "Nike Men Air Max 270 Sneakers", "brand": "Nike",
+              "primaryColour": "Black", "articleType": {"typeName": "Casual Shoes"}, "landingPageUrl": "a"},
+             {"productId": 2, "productName": "Nike Men Air Max 270 Sneakers", "brand": "Nike",
+              "primaryColour": "Black", "articleType": {"typeName": "Casual Shoes"}, "landingPageUrl": "b",
+              "inventoryInfo": []},
+             {"productId": 3, "productName": "Nike Men Air Max 270 Sneakers", "brand": "Nike",
+              "primaryColour": "Black", "articleType": {"typeName": "Casual Shoes"}, "landingPageUrl": "c",
+              "inventoryInfo": [{"available": False}]}]
+    html = "<script>window.__myx = " + json.dumps({"searchData": {"results": {"products": prods}}}) + "</script>"
+    assert [c.in_stock for c in from_myntra_search(html)] == [None, None, False]
+
+
+async def test_missing_apify_key_is_a_clear_source_error(monkeypatch, tmp_path):
+    from app.sources import apify
+    from app.sources.amazon import SourceError, get_source
+    monkeypatch.setattr(apify, "CACHE_DIR", tmp_path / "apify")
+    monkeypatch.setattr(apify, "OFFLINE", False)
+    monkeypatch.delenv("APIFY_KEY", raising=False)
+    calls = []
+    client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: calls.append(r) or httpx.Response(500)))
+    with pytest.raises(SourceError, match="APIFY_KEY is not set — see README"):
+        await get_source(client, "https://www.amazon.in/dp/B0GL8GXNTS")
+    assert not calls
+
+
+def test_tv_colour_is_ignored_for_pooling():
+    # spec §6.2: TV colour is ignored; a differently-coloured listing of the same model is no "fallback"
+    from app.models import Candidate, Canonical, SourceProduct
+    tv = Canonical(brand="sony", family="bravia 3", model_code="K-55S30", screen_in=55, colour="Black",
+                   title="Sony Bravia 3 55 inch K-55S30 Black")
+    src = SourceProduct("u", "a", tv.title, None, Category.TV, tv)
+    titan = Candidate(FLIPKART, "https://fk/t", "Sony Bravia 3 139 cm (55 inch) K-55S30",
+                      Canonical(brand="sony", family="bravia 3", model_code="K-55S30", screen_in=55,
+                                colour="Titanium Black"), True)
+    m = decide(src, [titan])
+    assert m.decision.value == "match" and not m.colour_fallback
+    assert to_result(FLIPKART, m, [FetchStatus.OK], "Black").colour_fallback_note is None
