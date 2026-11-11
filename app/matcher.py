@@ -1,9 +1,16 @@
 from __future__ import annotations
 
 import re
+from collections import Counter
+from dataclasses import dataclass, field
 
-from app.models import Candidate, Canonical, Category
-from app.normalize import distinctive_words, is_accessory, model_base, norm_brand, pack_count
+from rapidfuzz import fuzz
+
+from app.extract import REQUIRED, missing_required
+from app.models import (Candidate, Canonical, Category, Decision, FetchStatus, Outcome, Platform,
+                        PlatformResult, SourceProduct)
+from app.normalize import (base_colour, colour_key, distinctive_words, is_accessory, model_base,
+                           norm_brand, pack_count)
 
 
 def _fmt(x) -> str:
@@ -72,3 +79,152 @@ def _distinct_veto(src: Canonical, cand: Candidate) -> bool:
         if not set(src.family.split()) <= toks:
             return True
     return False
+
+
+# ---------------------------------------------------------------- scoring (§6.5)
+
+MARGIN = 0.15
+
+
+def score(src: Canonical, cand: Candidate, cat: Category) -> float:
+    c = cand.canon
+    sm, cm = model_base(src.model_code), model_base(c.model_code)
+    ident = (_both(sm, cm) and sm == cm) or (_both(src.ean, c.ean) and src.ean == c.ean)
+    sk, ck = colour_key(src.colour), colour_key(c.colour)
+    colour = _both(sk, ck) and sk == ck
+    title = fuzz.token_sort_ratio((src.title or "").lower(), (cand.title or "").lower()) / 100
+    req = REQUIRED.get(cat, [])
+    present = (len(req) - len(missing_required(c, cat))) / len(req) if req else 1.0
+    return 0.40 * ident + 0.25 * colour + 0.20 * title + 0.15 * present
+
+
+# ---------------------------------------------------------------- decision (§6.6)
+
+@dataclass
+class Match:
+    decision: Decision
+    candidate: Candidate | None
+    reason: str
+    colour_fallback: bool = False
+    survivors: list[Candidate] = field(default_factory=list)
+    src: Canonical | None = None
+    category: Category | None = None
+    src_missing: list[str] = field(default_factory=list)
+    checked: int = 0
+    none_had: str | None = None
+
+
+def _stock_rank(c: Candidate) -> int:
+    return {True: 0, None: 1, False: 2}[c.in_stock]
+
+
+def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
+    s, cat = src.canon, src.category
+    base = dict(src=s, category=cat, src_missing=list(src.missing_required), checked=len(cands))
+    vetoes, survivors = [], []
+    for cand in cands:
+        r = veto(s, cand, cat)
+        (vetoes.append(r) if r else survivors.append(cand))
+    if not survivors:
+        return Match(Decision.NONE, None, "no survivors",
+                     none_had=_none_had(s, cat, vetoes), **base)
+
+    pool, fallback = survivors, False
+    sk = colour_key(s.colour)
+    if cat in (Category.PHONE, Category.TV) and sk:
+        preferred = [c for c in survivors if colour_key(c.canon.colour) == sk]
+        if preferred:
+            pool = preferred
+        else:
+            fallback = True
+    scored = sorted(pool, key=lambda c: -score(s, c, cat))
+    if fallback:
+        sb = base_colour(s.colour) or s.base_colour
+        scored = sorted(scored, key=lambda c: (_stock_rank(c), not (sb and c.canon.base_colour == sb)))
+    top = scored[0]
+
+    if src.missing_required:
+        return Match(Decision.AMBIGUOUS, top, "source missing: " + ", ".join(src.missing_required),
+                     fallback, pool, **base)
+    if len(scored) >= 2 and not fallback:
+        if score(s, top, cat) - score(s, scored[1], cat) < MARGIN:
+            return Match(Decision.AMBIGUOUS, top, "tie", fallback, pool, **base)
+    miss = missing_required(top.canon, cat)
+    if miss:
+        return Match(Decision.AMBIGUOUS, top, "candidate missing: " + ", ".join(miss),
+                     fallback, pool, **base)
+    return Match(Decision.MATCH, top, _matched_on(s, top, cat), fallback, pool, **base)
+
+
+def resolve_tie(m: Match, chosen: Candidate | None) -> Match:
+    if m.decision != Decision.AMBIGUOUS or m.reason != "tie" or m.src_missing:
+        return m
+    if chosen is None or not any(chosen is c for c in m.survivors):
+        return m
+    if m.category and missing_required(chosen.canon, m.category):
+        return m
+    return Match(Decision.MATCH, chosen, _matched_on(m.src or Canonical(), chosen, m.category),
+                 m.colour_fallback, m.survivors, m.src, m.category, m.src_missing, m.checked)
+
+
+def _matched_on(s: Canonical, cand: Candidate, cat: Category | None) -> str:
+    c, facts = cand.canon, []
+    code = s.model_code or c.model_code
+    if code:
+        facts.append(f"model {code}")
+    if cat == Category.PHONE and c.ram_gb and c.storage_gb:
+        facts.append(f"{_fmt(c.ram_gb)}GB/{_fmt(c.storage_gb)}GB")
+    if cat == Category.TV and c.screen_in:
+        facts.append(f'{_fmt(c.screen_in)}"')
+    if c.colour:
+        facts.append(c.colour)
+    return "Matched on " + ", ".join(facts) if facts else "Matched"
+
+
+def _none_had(s: Canonical, cat: Category, vetoes: list[str]) -> str | None:
+    if not vetoes:
+        return None
+    r = Counter(v.split(" ")[0] if v.startswith(("ram ", "storage ")) else v for v in vetoes).most_common(1)[0][0]
+    what = {
+        "storage": s.storage_gb and f"{_fmt(s.storage_gb)}GB",
+        "ram": s.ram_gb and f"{_fmt(s.ram_gb)}GB RAM",
+        "family": s.family and f"model {s.family}",
+        "model code": s.model_code and f"model {s.model_code}",
+        "brand": s.brand and f"brand {s.brand}",
+        "accessory": "a non-accessory listing",
+        "screen size": s.screen_in and f'{_fmt(s.screen_in)}"',
+        "colour": (s.colour or s.base_colour) and f"colour {s.colour or s.base_colour}",
+        "type": s.product_type and f"type {s.product_type}",
+        "style code": s.style_code and f"style {s.style_code}",
+        "pack count": f"pack of {max(s.pack_count, pack_count(s.title))}",
+        "distinctive words": "a matching title",
+    }.get(r)
+    return what or r
+
+
+# ---------------------------------------------------------------- outcome (§6.7)
+
+def to_result(platform: Platform, match: Match, statuses: list[FetchStatus],
+              src_colour: str | None) -> PlatformResult:
+    m, cand = match, match.candidate
+    if m.decision == Decision.NONE or cand is None:
+        if any(st in (FetchStatus.BLOCKED, FetchStatus.ERROR) for st in statuses):
+            return PlatformResult(platform, Outcome.COULDNT_CHECK, None,
+                                  f"Couldn't check: {platform.value.capitalize()} was blocked or errored")
+        if m.checked == 0:
+            reason = f"Not listed: no results on {platform.value.capitalize()}"
+        else:
+            reason = f"Not listed: {m.checked} candidates checked, none had {m.none_had or 'a match'}"
+        return PlatformResult(platform, Outcome.NOT_LISTED, None, reason)
+
+    note = None
+    if m.colour_fallback and src_colour and cand.canon.colour:
+        note = f"Not available in {src_colour}; showing {cand.canon.colour}"
+    if m.decision == Decision.AMBIGUOUS:
+        reason = "Several listings look equally close" if m.reason == "tie" else m.reason
+        return PlatformResult(platform, Outcome.POSSIBLE, cand.url, reason, note)
+    if cand.in_stock is None:
+        return PlatformResult(platform, Outcome.POSSIBLE, cand.url,
+                              "Matched, but stock status couldn't be read", note)
+    outcome = Outcome.IN_STOCK if cand.in_stock else Outcome.OUT_OF_STOCK
+    return PlatformResult(platform, outcome, cand.url, m.reason, note)
