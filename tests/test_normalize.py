@@ -89,3 +89,26 @@ def test_is_accessory():
 def test_distinctive_words():
     assert distinctive_words("Puma Men Essentials Logo Slim Fit Polo T-shirt Black", "puma") == {
         "essentials", "logo", "slim", "fit"}
+
+
+def test_is_accessory_negatives():
+    for t in (
+        "Samsung Galaxy S26 Ultra 5G 6.9-inch QHD+ Dynamic AMOLED 2X Screen, S Pen Included",
+        "Apple iPhone 16 Pro Max 256GB Back Glass Titanium",
+        "Samsung 75 inch Crystal 4K Smart TV with Panel",
+        "Samsung Galaxy S26 Ultra (Black, 512GB) with Charger in box",
+    ):
+        assert not is_accessory(t)
+
+
+def test_screen_inches_titles_and_snapping():
+    assert screen_inches("Samsung Galaxy S26 Ultra 5G (Black, 512 GB)") is None
+    assert screen_inches("6.9-inch QHD+ Screen") == 7
+    assert screen_inches("Sony BRAVIA 3 139 cm (55 inch) 4K") == 55
+    assert screen_inches("27 inch") == 27
+    assert screen_inches("138.71 cm") == 55
+
+
+def test_distinctive_words_keeps_model_numbers():
+    assert distinctive_words("Nike Air Max 270 Men's Shoes", "nike") == {"air", "max", "270"}
+    assert distinctive_words("Nike Air Max 90 Men's Shoes", "nike") == {"air", "max", "90"}

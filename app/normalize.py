@@ -13,7 +13,6 @@ BRAND_ALIASES: dict[str, str] = {
 }
 
 FAMILY_DROP_TOKENS = {"5g", "4g", "3g", "lte"}
-FAMILY_QUALIFIERS = {"pro", "max", "ultra", "plus", "fe", "lite", "mini", "neo", "edge", "fold", "flip"}
 
 TV_SIZES = [24, 32, 40, 43, 50, 55, 65, 75, 85, 98]
 
@@ -51,10 +50,13 @@ COLOUR_PHRASES: dict[str, str] = {
     "multi colour": "multi",
 }
 
-ACCESSORY_KEYWORDS = {
-    "case", "cover", "glass", "protector", "tempered", "screen", "guard", "back", "panel",
-    "skin", "charger", "cable", "adapter", "lens", "ring", "strap", "pouch", "holder",
-}
+ACCESSORY_TOKENS = {"case", "cover", "protector", "skin", "holder", "stand", "mount", "adapter"}
+ACCESSORY_PATTERNS = [re.compile(p) for p in (
+    r"\bscreen (?:protector|guard)\b", r"\btempered glass\b", r"\bback (?:cover|case|panel)\b",
+    r"\blens (?:protector|glass)\b", r"\bcamera ring\b", r"\bphone case\b",
+    r"\b(?:case|cover|skin|charger|cable|strap) for\b",
+    r"\bpanel\b.*\bback\b", r"\bback\b.*\bpanel\b",
+)]
 
 GENDER_WORDS = {"men", "mens", "women", "womens", "boys", "boy", "girls", "girl", "unisex", "kids", "man", "woman"}
 PRODUCT_TYPE_WORDS = {"t-shirt", "tshirt", "tee", "polo", "jersey", "shirt", "shoes", "shoe", "sneakers", "sneaker"}
@@ -132,22 +134,22 @@ def parse_ram_storage(s: str) -> tuple[int | None, int | None]:
 def screen_inches(s: str | None) -> int | None:
     if not s:
         return None
-    s = s.lower()
-    m = re.search(r"(\d+(?:\.\d+)?)\s*(?:inch|inches|in\b|\")", s)
+    s = s.lower().strip()
+    m = re.search(r"(\d+(?:\.\d+)?)[\s-]*(?:inch|inches|in\b|\")", s)
     if m:
         v = float(m.group(1))
     else:
         m = re.search(r"(\d+(?:\.\d+)?)\s*cm", s)
         if m:
             v = float(m.group(1)) / 2.54
+        elif re.fullmatch(r"\d+(?:\.\d+)?", s):
+            v = float(s)
         else:
-            m = re.search(r"\d+(?:\.\d+)?", s)
-            if not m:
-                return None
-            v = float(m.group(0))
+            return None
     if v < 20:
         return int(v + 0.5)
-    return min(TV_SIZES, key=lambda t: abs(t - v))
+    nearest = min(TV_SIZES, key=lambda t: abs(t - v))
+    return nearest if abs(nearest - v) <= 2 else int(v + 0.5)
 
 
 def model_base(code: str | None) -> str | None:
@@ -201,14 +203,18 @@ def clean_ean(s: str | None) -> str | None:
 
 
 def is_accessory(title: str) -> bool:
-    return bool(set(re.findall(r"[a-z0-9]+", (title or "").lower())) & ACCESSORY_KEYWORDS)
+    t = (title or "").lower()
+    if set(re.findall(r"[a-z0-9]+", t)) & ACCESSORY_TOKENS:
+        return True
+    return any(p.search(t) for p in ACCESSORY_PATTERNS)
 
 
 def distinctive_words(title: str, brand: str | None) -> set[str]:
     t = (title or "").lower().replace("t-shirt", "tshirt")
     t = re.sub(r"pack of \d+|\d+\s*-?\s*pack|\bpack\b", " ", t)
+    t = re.sub(r"\d+(?:\.\d+)?[\s-]*(?:gb|tb|inch|inches|cm|mm|ml|kg)\b|\buk\s*\d+\b", " ", t)
     drop = set(GENDER_WORDS) | PRODUCT_TYPE_WORDS | SIZE_WORDS | FILLER_WORDS | set(COLOUR_SYNONYMS)
     for b in (brand, norm_brand(brand)):
         if b:
             drop.update(re.findall(r"[a-z0-9]+", b.lower()))
-    return {w for w in re.findall(r"[a-z0-9]+", t) if w not in drop and not w.isdigit()}
+    return {w for w in re.findall(r"[a-z0-9]+", t) if w not in drop and not re.fullmatch(r"(19|20)\d{2}", w)}
