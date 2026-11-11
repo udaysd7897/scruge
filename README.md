@@ -74,7 +74,7 @@ app/server.py ── app/pipeline.py: check(url)
                     ├─ sources/amazon.py   resolve link → Apify junglee~amazon-crawler
                     │      └─ extract.from_amazon → SourceProduct (category + canonical record)
                     │
-                    └─ per platform, concurrently (Croma 90 s, Flipkart/Myntra 20 s budget):
+                    └─ per platform, concurrently (Croma 90 s, Flipkart 45 s, Myntra 20 s budget):
                          queries.ladder(src, platform)  model code → brand+family+attrs → brand+family
                            └─ sources/flipkart.py  search page → ≤10 product pages (plain HTTPS)
                               sources/croma.py     Apify sian.agency~croma-product-scraper
@@ -120,8 +120,10 @@ colour → base colour, EAN checksum, accessory detection and distinctive words.
   sides have one, the model numbers must match exactly (after removing spaces), so a regional
   suffix on one store gives "Not listed" rather than a guess.
 - Flipkart/Myntra markup can change, or they can start rate-limiting. Failures show as
-  "Couldn't check", never as "Not listed". One live Flipkart run hit the 20 s budget and
-  came back "Couldn't check".
+  "Couldn't check", never as "Not listed". One live Flipkart run hit the old 20 s budget and
+  came back "Couldn't check", so Flipkart now gets 45 s (a search page plus up to 10 product
+  pages, 3 at a time). If any Flipkart product page fails to load, a match among the pages that
+  did load still wins, but "no match" becomes "Couldn't check": the unread page may have been it.
 - Croma search returns nearby models when the exact one is missing (for example "S26 Plus"
   returns only S22/S23). The vetoes drop them, so the result is "Not listed".
 - Stock is a snapshot at check time. Myntra counts a product as in stock if any size is available.

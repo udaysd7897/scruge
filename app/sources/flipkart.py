@@ -63,8 +63,8 @@ async def flipkart_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchS
             cands.extend(from_flipkart_page(html, u))
         except Exception:
             failures.append(FetchStatus.ERROR)
-    if not cands:
-        if failures and len(failures) * 2 >= len(results):
-            return (FetchStatus.BLOCKED if FetchStatus.BLOCKED in failures else FetchStatus.ERROR), []
-        return FetchStatus.EMPTY, []
-    return FetchStatus.OK, cands
+    if failures:
+        # an unread product page may have been the match: report the failure together with what did
+        # parse, so a match among those still wins but "no match" becomes "Couldn't check"
+        return (FetchStatus.BLOCKED if FetchStatus.BLOCKED in failures else FetchStatus.ERROR), cands
+    return (FetchStatus.OK, cands) if cands else (FetchStatus.EMPTY, [])

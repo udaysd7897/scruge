@@ -224,3 +224,61 @@ def test_polo_collar_wording_is_possible_not_not_listed():
     cands = myntra(("Allen Solly Men Navy Blue Solid Polo Collar T-shirt", "Allen Solly", "Navy Blue", "Tshirts",
                     True))
     assert to_result(MYNTRA, decide(sp, cands), [FetchStatus.OK], "Navy Blue").outcome == Outcome.POSSIBLE
+
+
+# ------------------------------------------------------------------ 3. Flipkart partial failures
+
+import httpx  # noqa: E402
+import pytest  # noqa: E402
+
+from app import pipeline  # noqa: E402
+from app.sources.flipkart import flipkart_candidates  # noqa: E402
+
+REDMI = amz("Redmi Note 14 5G (Titan Black, 8GB RAM, 128GB Storage)", "Redmi",
+            "Electronics > Mobiles & Accessories > Smartphones & Basic Mobiles > Smartphones")
+
+
+def _redmi_page(storage, colour="Titan Black"):
+    return fk_page(f"REDMI Note 14 5G ({colour}, {storage} GB)", "REDMI", Model_Name="Note 14 5G", RAM="8 GB",
+                   Internal_Storage=f"{storage} GB", Color=colour)
+
+
+def _fk_client(pages: dict[str, tuple[int, str]]):
+    links = "".join(f'<a href="/redmi-note-14-5g/p/itm{pid.lower()}?pid={pid}">x</a>' for pid in pages)
+    search = "<html>" + links + "y" * 25_000 + "</html>"
+
+    def h(req):
+        if req.url.path == "/search":
+            return httpx.Response(200, text=search)
+        code, body = pages[req.url.params["pid"]]
+        return httpx.Response(code, text=body)
+
+    return httpx.AsyncClient(transport=httpx.MockTransport(h))
+
+
+@pytest.fixture
+def _no_llm(monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+
+
+async def test_flipkart_some_pages_blocked_returns_blocked_with_parsed_candidates():
+    pages = {"MOB1": (403, "x"), "MOB2": (200, _redmi_page(256)), "MOB3": (200, _redmi_page(512))}
+    st, cands = await flipkart_candidates(_fk_client(pages), "redmi note 14")
+    assert st == FetchStatus.BLOCKED and len(cands) == 2
+
+
+async def test_flipkart_partial_block_without_match_is_couldnt_check(_no_llm):
+    sp = from_amazon(REDMI)
+    pages = {"MOB1": (403, "x"), "MOB2": (403, "x"), "MOB3": (200, _redmi_page(256)),
+             "MOB4": (200, _redmi_page(512)), "MOB5": (200, _redmi_page(64))}
+    async with _fk_client(pages) as client:
+        r = await pipeline.run_platform(client, sp, FLIPKART)
+    assert r.outcome == Outcome.COULDNT_CHECK
+
+
+async def test_flipkart_partial_block_with_exact_match_is_in_stock(_no_llm):
+    sp = from_amazon(REDMI)
+    pages = {"MOB1": (403, "x"), "MOB2": (200, _redmi_page(128)), "MOB3": (200, _redmi_page(256))}
+    async with _fk_client(pages) as client:
+        r = await pipeline.run_platform(client, sp, FLIPKART)
+    assert r.outcome == Outcome.IN_STOCK and "pid=MOB2" in r.url

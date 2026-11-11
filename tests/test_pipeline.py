@@ -256,7 +256,7 @@ async def test_tie_calls_llm_and_resolves(monkeypatch):
 
 
 def test_timeouts():
-    assert pipeline.TIMEOUTS == {CROMA: 90, FLIPKART: 20, MYNTRA: 20}
+    assert pipeline.TIMEOUTS == {CROMA: 90, FLIPKART: 45, MYNTRA: 20}
 
 
 async def test_closing_stream_cancels_pending_platforms(monkeypatch):
