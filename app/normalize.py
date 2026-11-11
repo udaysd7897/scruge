@@ -269,3 +269,27 @@ def pack_count(title: str) -> int:
     if not m:
         return 1
     return int(m.group(1) or m.group(2)) or 1
+
+
+# brand names that contain a product-type word
+_TYPE_BRAND_NOISE = re.compile(r"\bu\.?\s?s\.?\s+polo(?:\s+assn\.?|\s+association)?|\bpolo\s+assn\.?|"
+                               r"\bpolo\s+ralph\s+lauren\b|\bralph\s+lauren\s+polo\b")
+_TYPE_RULES = (
+    ("polo", re.compile(r"\bpolos?\b")),
+    ("jersey", re.compile(r"\bjerseys?\b")),
+    ("tee", re.compile(r"\bt-?shirts?\b|\btshirts?\b|\btees?\b|\bround[\s-]neck\b|\bcrew[\s-]neck\b")),
+)
+
+
+def product_type(title: str | None, breadcrumbs: str | None) -> str | None:
+    """Apparel product type: "polo" | "jersey" | "tee" (polo wins over tee: "Polo T-Shirt" is a polo).
+    Read from the title, then from the last breadcrumb segment ("T-Shirts & Polos > Polos")."""
+    sources = [title or ""]
+    if breadcrumbs:
+        sources.append(re.split(r"\s*>\s*", breadcrumbs.strip())[-1])
+    for text in sources:
+        t = _TYPE_BRAND_NOISE.sub(" ", text.lower())
+        for name, rx in _TYPE_RULES:
+            if rx.search(t):
+                return name
+    return None

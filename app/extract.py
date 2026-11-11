@@ -7,8 +7,8 @@ from html import unescape
 
 from app.models import Candidate, Canonical, Category, Platform, SourceProduct
 from app.normalize import (
-    base_colour, clean_ean, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage, screen_inches,
-    tv_family,
+    base_colour, clean_ean, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage, product_type,
+    screen_inches, tv_family,
 )
 
 REQUIRED: dict[Category, list[str]] = {
@@ -137,6 +137,7 @@ def from_amazon(item: dict) -> SourceProduct:
         screen_in=screen_inches(title) if cat == Category.TV else None,
         colour=colour,
         base_colour=base_colour(colour),
+        product_type=product_type(title, item.get("breadCrumbs")) if cat == Category.APPAREL else None,
         title=title,
     )
     img = item.get("thumbnailImage") or (item.get("highResolutionImages") or [None])[0]
@@ -240,7 +241,9 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
         brand=norm_brand(brand), family=fam,
         model_code=code, ram_gb=ram, storage_gb=storage,
         screen_in=screen_inches(spec.get("Display Size")),
-        colour=colour, base_colour=base_colour(colour), title=p.get("name") or "",
+        colour=colour, base_colour=base_colour(colour),
+        product_type=product_type(p.get("name"), None) if fk_cat == Category.APPAREL else None,
+        title=p.get("name") or "",
     )
     price = offers.get("price")
     return [Candidate(Platform.FLIPKART, url, canon.title, canon, _fk_stock(offers.get("availability")),
@@ -269,7 +272,9 @@ def from_myntra_search(html: str) -> list[Candidate]:
         canon = Canonical(
             brand=norm_brand(brand), family=fam,
             colour=colour, base_colour=base_colour(colour),
-            product_type=None if "shoe" in art or "sneaker" in art else _MYNTRA_TYPES.get(art),
+            # Myntra files polos under "Tshirts": the name decides first, the article type second
+            product_type=(None if "shoe" in art or "sneaker" in art
+                          else product_type(name, None) or _MYNTRA_TYPES.get(art)),
             title=name,
         )
         inv = p.get("inventoryInfo") or []

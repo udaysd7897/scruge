@@ -12,10 +12,16 @@ def _join(*parts) -> str | None:
     return " ".join(str(p) for p in parts).lower()
 
 
+def _head(title: str | None) -> str:
+    # drop the bracketed/comma tails ("(ASKPQRGFS12345_Navy_M)", ", Black/White, 8 UK")
+    return re.split(r"[(,|]", title or "")[0]
+
+
 def _distinct_in_order(title: str, brand: str | None, n: int = 3) -> list[str]:
+    title = _head(title)
     words = distinctive_words(title, brand)
     out: list[str] = []
-    t = (title or "").lower().replace("t-shirt", "tshirt")
+    t = title.lower().replace("t-shirt", "tshirt")
     for w in re.findall(r"[a-z0-9]+", t):
         if w in words and w not in out:
             out.append(w)
@@ -44,6 +50,9 @@ def ladder(src: SourceProduct, platform: Platform) -> list[str]:
             extra = _distinct_in_order(c.title or src.title, c.brand)
             base = " ".join([base, *extra])
         rungs.append(base)
+        # fallback that needs neither type nor colour: the ladder is never empty when the brand is known
+        if c.brand:
+            rungs.append(" ".join([c.brand, *_distinct_in_order(c.title or src.title, c.brand, 4)]).lower())
     if cat in (Category.PHONE, Category.TV, Category.SNEAKER):
         rungs.append(_join(c.brand, c.family))
     out: list[str] = []
