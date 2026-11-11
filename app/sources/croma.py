@@ -7,11 +7,13 @@ from app.models import Candidate, FetchStatus
 from app.sources.apify import run_actor
 
 ACTOR = "sian.agency~croma-product-scraper"
+# Croma's actor bills per detailed result (~$0.07 each on the free tier): keep each search small.
+MAX_RESULTS = 5
 
 
 async def croma_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchStatus, list[Candidate]]:
     status, items = await run_actor(
-        client, ACTOR, {"keywords": [q], "scrapeMode": "detail", "sort": "relevance", "maxResults": 10}
+        client, ACTOR, {"keywords": [q], "scrapeMode": "detail", "sort": "relevance", "maxResults": MAX_RESULTS}
     )
     if status != FetchStatus.OK:
         return status, []

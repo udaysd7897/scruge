@@ -78,7 +78,8 @@ def install_replay(live: bool, live_http: bool = False) -> None:
         st, items = await real_actor(client, actor, payload, timeout_s)
         if st == FetchStatus.EMPTY:
             _save("apify_empty", k, True)
-        elif st == FetchStatus.ERROR and not live and _load("apify_empty", k):
+        elif st == FetchStatus.ERROR and not live and any(
+                _load("apify_empty", _key("empty", actor, p)) for p in [payload, *apify.larger_payloads(payload)]):
             return FetchStatus.EMPTY, []
         return st, items
 

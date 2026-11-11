@@ -145,6 +145,7 @@ async def test_croma():
     r = calls[0]
     assert "croma-product-scraper" in str(r.url) and "run-sync-get-dataset-items?timeout=90" in str(r.url)
     assert r.headers["authorization"] == "Bearer test-key" and "test-key" not in str(r.url)
+    assert json.loads(r.content)["maxResults"] == 5  # Croma bills per result: keep searches small
 
 
 async def test_run_actor_cache_and_empty():
@@ -158,6 +159,19 @@ async def test_run_actor_cache_and_empty():
     assert (await run_actor(e, "x~y", {"k": 2}))[0] == S.EMPTY
     await run_actor(e, "x~y", {"k": 2})
     assert len(calls2) == 2  # empty not cached
+
+
+async def test_run_actor_reuses_larger_cached_answer():
+    # results bought with maxResults 10 still answer a maxResults 5 request, cut to 5, with no call
+    calls = []
+    ten = [{"i": i} for i in range(10)]
+    await run_actor(apify_client(ten, calls), "x~y", {"q": "s26", "maxResults": 10})
+    assert len(calls) == 1
+    st, items = await run_actor(apify_client(ten, calls), "x~y", {"q": "s26", "maxResults": 5})
+    assert st == S.OK and items == ten[:5] and len(calls) == 1
+    # a smaller cached answer can't stand in for a bigger request
+    st, _ = await run_actor(apify_client(ten, calls), "x~y", {"q": "s26", "maxResults": 20})
+    assert len(calls) == 2
 
 
 async def test_run_actor_no_key(monkeypatch):
