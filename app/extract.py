@@ -7,8 +7,8 @@ from html import unescape
 
 from app.models import Candidate, Canonical, Category, Platform, SourceProduct
 from app.normalize import (
-    base_colour, clean_ean, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage, product_type,
-    screen_inches, tv_family,
+    base_colour, clean_ean, is_accessory, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage,
+    product_type, screen_inches, tv_family,
 )
 
 REQUIRED: dict[Category, list[str]] = {
@@ -27,6 +27,13 @@ _CRUMB_RULES: list[tuple[Category, re.Pattern]] = [
 _TITLE_RULES: list[tuple[Category, re.Pattern]] = [
     (Category.TV, re.compile(r"\b(?:smart|led|oled|qled|google|android)?\s*tv\b|televisions?", re.I)),
     (Category.PHONE, re.compile(r"smartphones?|mobile phones?", re.I)),
+    # Amazon sometimes returns no breadcrumbs and titles rarely say "smartphone" ("Apple iPhone 17
+    # Pro 256 GB: ..."): known phone lines followed by a model number identify the category
+    (Category.PHONE, re.compile(
+        r"\b(?:iphone\s*\d{1,2}|galaxy\s+(?:[samfz]\s?\d{1,3}|z\s*(?:fold|flip)\s*\d)|pixel\s*\d{1,2}"
+        r"|oneplus\s*(?:\d{1,2}|nord)|redmi\s*(?:note\s*)?\d{1,2}|poco\s*[a-z]\d|vivo\s*[a-z]\d{1,3}"
+        r"|oppo\s*(?:reno|find|[a-z]\d)|realme\s*(?:\d{1,2}|narzo|gt)|iqoo\s*(?:\d|z|neo)"
+        r"|moto(?:rola)?\s*(?:g\d|edge|razr)|nothing\s*phone)", re.I)),
     (Category.SNEAKER, re.compile(r"\b(?:shoes?|sneakers?)\b", re.I)),
     (Category.APPAREL, re.compile(r"t-?shirts?|\bpolos?\b|\bjerseys?\b|\btshirts?\b", re.I)),
 ]
@@ -58,6 +65,8 @@ def detect_category(breadcrumbs: str | None, title: str) -> Category:
                     rx = _TV_PARENT
                 if rx.search(seg):
                     return cat
+    if is_accessory(title or ""):
+        return Category.UNSUPPORTED  # "Spigen case for iPhone 17 Pro" names a phone but isn't one
     for cat, rx in _TITLE_RULES:
         if rx.search(title or ""):
             return cat
