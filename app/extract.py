@@ -184,6 +184,12 @@ def _ld_products(html: str) -> list[dict]:
     return out
 
 
+# Some pages render the spec table client-side; the rows are then only in the page-state JSON:
+# ..."label_1":{"value":{"text":["55UA82006LA"]}},"label_0":{"value":{"text":"Model Name"}}...
+_FK_STATE_SPEC = re.compile(
+    r'"label_1":\{"value":\{"text":\["((?:[^"\\]|\\.)*)"\]\}\},"label_0":\{"value":\{"text":"([^"]+)"\}\}')
+
+
 def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     prods = _ld_products(html)
     if not prods:
@@ -195,6 +201,12 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     for i, t in enumerate(toks[:-1]):
         if t in labels and t not in spec:
             spec[t] = toks[i + 1]
+    for value, label in _FK_STATE_SPEC.findall(html):
+        if label in labels and label not in spec:
+            try:
+                spec[label] = json.loads(f'"{value}"')
+            except ValueError:
+                continue
     m = re.search(r"/(itm[0-9a-z]+)", url, re.I)
     offers = p.get("offers") or {}
     if isinstance(offers, list):

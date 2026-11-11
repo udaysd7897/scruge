@@ -97,3 +97,11 @@ def test_flipkart_tv_model_name_is_model_code():
     url = "https://www.flipkart.com/lg-139-cm-55-inch/p/itmee9cd7f3011a2?pid=TVSHMYS2G69WGGAK"
     [fk] = from_flipkart_page(read("fk_tv_lg_nu870.html"), url)
     assert (fk.canon.brand, fk.canon.model_code, fk.canon.screen_in, fk.in_stock) == ("lg", "55NU870BPLA", 55, True)
+
+
+def test_flipkart_specs_from_embedded_state_when_table_not_rendered():
+    # Some Flipkart pages ship the spec table only inside the page-state JSON.
+    url = "https://www.flipkart.com/lg-ai-tv-ua8200/p/itm383c359293f5b?pid=TVSHCAYXEGC76H9F"
+    [fk] = from_flipkart_page(read("fk_tv_lg_ua8200.html"), url)
+    assert (fk.canon.brand, fk.canon.model_code, fk.canon.screen_in, fk.canon.colour) == (
+        "lg", "55UA82006LA", 55, "Black")
