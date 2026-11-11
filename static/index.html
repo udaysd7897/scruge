@@ -115,8 +115,7 @@ function card(p){
 function renderSearching(p,msg){
   var c=card(p);c.className="card s-searching";c.textContent="";
   var h=el("div","head");h.appendChild(el("span","plat",name(p)));
-  h.appendChild(el("span","badge","… Searching…"));c.appendChild(h);
-  if(msg)c.appendChild(el("p","reason",msg));
+  h.appendChild(el("span","badge","Searching\u2026"));c.appendChild(h);
 }
 function renderResult(r){
   var st=STATES[r.outcome]||STATES["Couldn't check"];
