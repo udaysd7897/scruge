@@ -81,15 +81,20 @@ def _attrs(item: dict) -> dict[str, str]:
 _CODE = re.compile(r"(?=[A-Z0-9./-]*\d)(?=[A-Z0-9./-]*[A-Z])[A-Z0-9][A-Z0-9./-]{4,}")
 
 
-def model_code_like(s: str | None) -> str | None:
-    """s if it looks like a manufacturer model code (one token, letters and digits), else None."""
+def model_code_like(s: str | None, screen_in: int | None = None) -> str | None:
+    """s if it looks like a manufacturer model code (one token, letters and digits), else None.
+    For a TV of known size the code must carry the size ("55QNED82SRA", not the series "QNED82")."""
     s = (s or "").strip()
-    return s if _CODE.fullmatch(s.upper()) else None
+    if not _CODE.fullmatch(s.upper()):
+        return None
+    if screen_in is not None and str(screen_in) not in s:
+        return None
+    return s
 
 
-def _amazon_tv_code(at: dict[str, str]) -> str | None:
+def _amazon_tv_code(at: dict[str, str], screen_in: int | None) -> str | None:
     for k in ("Model Number", "Manufacturer Part Number", "Model Name", "Item model number"):
-        code = model_code_like(at.get(k))
+        code = model_code_like(at.get(k), screen_in)
         if code:
             return code
     return None
@@ -113,7 +118,7 @@ def from_amazon(item: dict) -> SourceProduct:
         m = re.search(r"\(([^,)]+),", title)
         colour = m.group(1).strip() if m else None
     raw_brand = item.get("brand") or at.get("Brand Name")
-    code = _amazon_tv_code(at) if cat == Category.TV else None
+    code = _amazon_tv_code(at, screen_inches(title)) if cat == Category.TV else None
     if cat in (Category.SNEAKER, Category.APPAREL):
         family = model_line(title.split("(")[0], raw_brand)
     elif cat == Category.TV:
@@ -229,7 +234,8 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
         fam = norm_family(spec.get("Model Name"))
     code = spec.get("Model Number")
     if not code and fk_cat == Category.TV:
-        code = model_code_like(spec.get("Model Name"))  # Flipkart TVs put the model code here
+        # Flipkart TVs put the model code here
+        code = model_code_like(spec.get("Model Name"), screen_inches(spec.get("Display Size")))
     canon = Canonical(
         brand=norm_brand(brand), family=fam,
         model_code=code, ram_gb=ram, storage_gb=storage,

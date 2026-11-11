@@ -105,3 +105,11 @@ def test_flipkart_specs_from_embedded_state_when_table_not_rendered():
     [fk] = from_flipkart_page(read("fk_tv_lg_ua8200.html"), url)
     assert (fk.canon.brand, fk.canon.model_code, fk.canon.screen_in, fk.canon.colour) == (
         "lg", "55UA82006LA", 55, "Black")
+
+
+def test_tv_model_code_must_contain_screen_size():
+    from app.extract import model_code_like
+    assert model_code_like("QNED82", screen_in=55) is None  # a series name, not a model code
+    assert model_code_like("55QNED82SRA", screen_in=55) == "55QNED82SRA"
+    assert model_code_like("K-43S22BM2", screen_in=43) == "K-43S22BM2"
+    assert model_code_like("QNED82") == "QNED82"  # size unknown: shape check only
