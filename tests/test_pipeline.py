@@ -252,3 +252,52 @@ async def test_tie_calls_llm_and_resolves(monkeypatch):
     results = {e["data"]["platform"]: e["data"] for e in await run() if e["type"] == "result"}
     assert calls and results["croma"]["outcome"] == "In stock"
     assert results["croma"]["url"] == calls[0][1].url
+
+
+def test_timeouts():
+    assert pipeline.TIMEOUTS == {CROMA: 90, FLIPKART: 20, MYNTRA: 20}
+
+
+async def test_closing_stream_cancels_pending_platforms(monkeypatch):
+    finished = []
+
+    async def slow(client, q):
+        await asyncio.sleep(5)
+        finished.append(q)
+        return FetchStatus.EMPTY, []
+
+    patch(monkeypatch, croma=slow)
+    gen = check(URL)
+    async for e in gen:
+        if e["type"] == "result":
+            assert e["data"]["platform"] == "flipkart"
+            break
+    await gen.aclose()
+    await asyncio.sleep(0)
+    assert finished == []
+    left = [t for t in asyncio.all_tasks() if t.get_coro().__name__ == "run_platform"]
+    assert left == []
+
+
+def _tied(platform, n):
+    canon = Canonical(brand="samsung", family="galaxy s26 ultra", ram_gb=12, storage_gb=512,
+                      colour="Black", base_colour="black", title="Samsung Galaxy S26 Ultra Black 512")
+    return Candidate(platform, f"https://www.flipkart.com/x/p/itm{n}?pid=P{n}", canon.title, canon, True)
+
+
+async def test_slow_tiebreak_is_outside_platform_budget(monkeypatch):
+    a, b = _tied(FLIPKART, 1), _tied(FLIPKART, 2)
+
+    async def flip(client, q):
+        return FetchStatus.OK, [a, b]
+
+    async def slow_tb(src, survivors):
+        await asyncio.sleep(0.5)
+        return None
+
+    patch(monkeypatch, src=phone_src(), fk=flip)
+    monkeypatch.setitem(pipeline.TIMEOUTS, FLIPKART, 0.3)
+    monkeypatch.setattr(pipeline, "llm_tiebreak", slow_tb)
+    results = {e["data"]["platform"]: e["data"] for e in await run() if e["type"] == "result"}
+    assert results["flipkart"]["outcome"] == "Possible match – verify"
+    assert results["flipkart"]["url"] in (a.url, b.url)

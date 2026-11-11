@@ -32,10 +32,10 @@ def build_prompt(src: SourceProduct, survivors: list[Candidate]) -> str:
 async def _ask(prompt: str) -> str:
     import anthropic
 
-    client = anthropic.AsyncAnthropic(timeout=TIMEOUT)
-    msg = await client.messages.create(
-        model=MODEL, max_tokens=50, messages=[{"role": "user", "content": prompt}]
-    )
+    async with anthropic.AsyncAnthropic(timeout=TIMEOUT) as client:
+        msg = await client.messages.create(
+            model=MODEL, max_tokens=50, messages=[{"role": "user", "content": prompt}]
+        )
     return "".join(getattr(b, "text", "") for b in msg.content)
 
 

@@ -31,8 +31,9 @@ def ladder(src: SourceProduct, platform: Platform) -> list[str]:
     if platform != Platform.MYNTRA:
         rungs.append(c.model_code)
     if cat == Category.PHONE:
-        rungs.append(_join(c.brand, c.family, c.ram_gb and f"{c.ram_gb}gb",
-                           c.storage_gb and f"{c.storage_gb}gb", c.colour))
+        ram = f"{c.ram_gb}gb" if c.ram_gb is not None else None
+        storage = f"{c.storage_gb}gb" if c.storage_gb is not None else None
+        rungs.append(_join(c.brand, c.family, ram, storage, c.colour))
     elif cat == Category.TV:
         rungs.append(_join(c.brand, c.family or c.model_code, c.screen_in, "inch"))
     elif cat == Category.SNEAKER:

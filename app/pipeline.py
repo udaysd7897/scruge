@@ -6,7 +6,7 @@ from dataclasses import asdict
 from enum import Enum
 
 from app.llm import llm_tiebreak
-from app.matcher import decide, resolve_tie, to_result
+from app.matcher import Match, decide, resolve_tie, to_result
 from app.models import Candidate, Category, Decision, FetchStatus, Outcome, Platform, PlatformResult, SourceProduct
 from app.queries import ladder
 from app.sources.amazon import SourceError, get_source
@@ -47,7 +47,7 @@ def _plain(obj) -> dict:
     return conv(asdict(obj))
 
 
-async def _walk(client, src: SourceProduct, platform: Platform) -> PlatformResult:
+async def _walk(client, src: SourceProduct, platform: Platform) -> tuple[Match, list[FetchStatus]]:
     adapter = ADAPTERS[platform]
     statuses: list[FetchStatus] = []
     pool: list[Candidate] = []
@@ -63,20 +63,30 @@ async def _walk(client, src: SourceProduct, platform: Platform) -> PlatformResul
         m = decide(src, pool)
         if m.decision in (Decision.MATCH, Decision.AMBIGUOUS):
             break
-    if m.decision == Decision.AMBIGUOUS and m.reason == "tie":
-        chosen = await llm_tiebreak(src, m.survivors)
-        m = resolve_tie(m, chosen)
-    return to_result(platform, m, statuses, src.canon.colour)
+    return m, statuses
 
 
 async def run_platform(client, src: SourceProduct, platform: Platform) -> PlatformResult:
     try:
-        return await asyncio.wait_for(_walk(client, src, platform), TIMEOUTS[platform])
+        m, statuses = await asyncio.wait_for(_walk(client, src, platform), TIMEOUTS[platform])
     except (asyncio.TimeoutError, TimeoutError):
         return PlatformResult(platform, Outcome.COULDNT_CHECK, None, f"Couldn't check {_name(platform)}: timed out")
     except Exception:
-        return PlatformResult(platform, Outcome.COULDNT_CHECK, None,
-                              f"Couldn't check {_name(platform)}: something went wrong")
+        return _went_wrong(platform)
+    try:
+        # The tie-break runs outside the platform budget: llm_tiebreak has its own 20 s cap and
+        # returns None on timeout/error, so a slow LLM leaves the result at "Possible match".
+        if m.decision == Decision.AMBIGUOUS and m.reason == "tie":
+            chosen = await llm_tiebreak(src, m.survivors)
+            m = resolve_tie(m, chosen)
+        return to_result(platform, m, statuses, src.canon.colour)
+    except Exception:
+        return _went_wrong(platform)
+
+
+def _went_wrong(platform: Platform) -> PlatformResult:
+    return PlatformResult(platform, Outcome.COULDNT_CHECK, None,
+                          f"Couldn't check {_name(platform)}: something went wrong")
 
 
 async def check(url: str) -> AsyncIterator[dict]:
@@ -95,7 +105,17 @@ async def check(url: str) -> AsyncIterator[dict]:
             return
         for p in platforms:
             yield {"type": "progress", "platform": p.value, "message": f"Searching {_name(p)}…"}
-        for fut in asyncio.as_completed([run_platform(client, src, p) for p in platforms]):
-            res = await fut
-            yield {"type": "result", "data": _plain(res)}
-        yield {"type": "done"}
+        tasks = [asyncio.create_task(run_platform(client, src, p), name=f"run_platform:{p.value}")
+                 for p in platforms]
+        try:
+            for fut in asyncio.as_completed(tasks):
+                res = await fut
+                yield {"type": "result", "data": _plain(res)}
+            yield {"type": "done"}
+        finally:
+            # consumer may close the stream early: don't leave platform calls running
+            pending = [t for t in tasks if not t.done()]
+            for t in pending:
+                t.cancel()
+            if pending:
+                await asyncio.gather(*pending, return_exceptions=True)
