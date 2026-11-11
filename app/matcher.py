@@ -9,7 +9,7 @@ from rapidfuzz import fuzz
 from app.extract import REQUIRED, missing_required
 from app.models import (Candidate, Canonical, Category, Decision, FetchStatus, Outcome, Platform,
                         PlatformResult, SourceProduct)
-from app.normalize import (base_colour, colour_key, distinctive_words, is_accessory, model_base,
+from app.normalize import (base_colour, clean_ean, colour_key, distinctive_words, is_accessory, model_base,
                            norm_brand, pack_count)
 
 
@@ -164,12 +164,33 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
                      fallback, pool, **base)
     if len(scored) >= 2 and not fallback:
         if scores[id(top)] - scores[id(scored[1])] < MARGIN:
-            return Match(Decision.AMBIGUOUS, top, "tie", fallback, pool, **base)
+            group = [c for c in scored if scores[id(top)] - scores[id(c)] < MARGIN]
+            if not _all_duplicates(group):
+                return Match(Decision.AMBIGUOUS, top, "tie", fallback, pool, **base)
+            top = min(group, key=lambda c: (c.in_stock is not True, c.price is None,
+                                            c.price or 0, -scores[id(c)]))
     miss = missing_required(top.canon, cat)
     if miss:
         return Match(Decision.AMBIGUOUS, top, "Listing doesn't show " + _labels(miss),
                      fallback, pool, **base)
     return Match(Decision.MATCH, top, _matched_on(s, top, cat), fallback, pool, **base)
+
+
+def _dup_code(c: Candidate) -> str | None:
+    mc = c.canon.model_code
+    return re.sub(r"\s+", "", mc).upper() if mc else None
+
+
+def _all_duplicates(group: list[Candidate]) -> bool:
+    """True when every listing in group is the same product listed more than once."""
+    eans = {clean_ean(c.canon.ean) if c.canon.ean else None for c in group}
+    if len(eans) == 1 and None not in eans:
+        return True
+    codes = {_dup_code(c) for c in group}
+    if len(codes) != 1 or None in codes:
+        return False
+    return len({(c.canon.ram_gb, c.canon.storage_gb, colour_key(c.canon.colour), c.canon.screen_in)
+                for c in group}) == 1
 
 
 _LABELS = {"ram_gb": "RAM", "storage_gb": "storage", "screen_in": "screen size", "base_colour": "colour",

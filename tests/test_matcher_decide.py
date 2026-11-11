@@ -30,11 +30,12 @@ _n = iter(range(10_000))
 
 
 def c(colour="Black", in_stock=True, ram=12, storage=512, family="galaxy s26 ultra", model_code=None,
-      platform=FLIPKART):
+      platform=FLIPKART, ean=None, url=None, price=None):
     title = f"SAMSUNG Galaxy S26 Ultra 5G ({colour}, {storage} GB) ({ram} GB RAM)"
-    canon = Canonical(brand="samsung", family=family, model_code=model_code, ram_gb=ram, storage_gb=storage,
+    canon = Canonical(brand="samsung", family=family, model_code=model_code, ean=ean, ram_gb=ram, storage_gb=storage,
                       colour=colour, base_colour=base_colour(colour), title=title)
-    return Candidate(platform, f"https://www.flipkart.com/p/itm{next(_n)}", title, canon, in_stock)
+    return Candidate(platform, url or f"https://www.flipkart.com/p/itm{next(_n)}", title, canon, in_stock,
+                     price=price)
 
 
 def polo_src():
@@ -246,3 +247,25 @@ def test_fix2_source_missing_beats_colour_unclear():
 def test_fix2_empty_statuses_reason():
     r = to_result(CROMA, decide(phone_src(), []), [], "Black")
     assert r.reason == "Couldn't check Croma: no search was completed"
+
+
+def test_duplicate_listings_are_one_product():
+    from dataclasses import replace
+    src = phone_src(colour="Sky Blue", ram=12, storage=512)
+    kw = dict(colour="Sky Blue", in_stock=True, model_code="SM-S948BLBCINS", ean="8806097852056", price=159999)
+    a, b = c(url=".../p/327248", **kw), c(url=".../p/321503", **kw)
+    assert decide(src, [a, b]).decision == MATCH
+    b2 = replace(b, in_stock=False)
+    assert decide(src, [b2, a]).candidate is a
+    assert decide(src, [b2, a]).decision == MATCH
+    # cheaper duplicate preferred among in-stock
+    cheap = replace(b, price=149999)
+    assert decide(src, [a, cheap]).candidate is cheap
+    # same base code, different full codes, no ean: still a tie
+    x = c(colour="Sky Blue", model_code="SM-S948BLBCINS")
+    y = c(colour="Sky Blue", model_code="SM-S948BZBCINS")
+    assert decide(src, [x, y]).decision == AMBIGUOUS
+    # no identifiers: still a tie
+    assert decide(src, [c(colour="Sky Blue"), c(colour="Sky Blue", url="other")]).decision == AMBIGUOUS
+    # source missing required stays ambiguous
+    assert decide(phone_src(colour="Sky Blue", storage=None), [a, b]).decision == AMBIGUOUS
