@@ -88,7 +88,7 @@ def test_score_weights():
 
 def test_match_reason_and_url():
     src = phone_src(model_code="SM-S948B")
-    m = decide(src, [c(colour="Black", in_stock=True)])
+    m = decide(src, [c(colour="Black", in_stock=True, model_code="SM-S948B")])
     r = to_result(FLIPKART, m, [OK], "Black")
     assert r.outcome == Outcome.IN_STOCK and r.url == m.candidate.url
     assert r.reason == "Matched on model SM-S948B, 12GB/512GB, Black"
@@ -170,3 +170,61 @@ def test_tv_reason_and_margin():
     assert m.decision == MATCH and m.candidate is good
     assert to_result(FLIPKART, m, [OK], None).reason == 'Matched on model K-55S30, 55"'
     assert isinstance(m, Match)
+
+
+def test_fix1_unknown_colour_with_other_colour_is_ambiguous():
+    m = decide(phone_src(), [c(colour=None, in_stock=False), c(colour="Sky Blue", in_stock=True)])
+    assert m.decision == AMBIGUOUS and m.reason == "Colour unclear on this platform"
+    assert not m.colour_fallback
+    r = to_result(FLIPKART, m, [OK], "Black")
+    assert r.outcome == Outcome.POSSIBLE and r.colour_fallback_note is None
+
+
+def test_fix1_tv_unknown_colour_only_uses_gap_rule():
+    tv = Canonical(brand="sony", family="bravia 3", model_code="K-55S30", screen_in=55, colour="Black",
+                   title="Sony Bravia 3 55 inch K-55S30 Black")
+    src = SourceProduct("u", "a", tv.title, None, Category.TV, tv)
+    good = Candidate(FLIPKART, "https://fk/g", "Sony Bravia 3 139 cm (55 inch) K-55S30",
+                     Canonical(brand="sony", family="bravia 3", model_code="K-55S30", screen_in=55), False)
+    weak = Candidate(FLIPKART, "https://fk/w", "Sony Bravia 3 139 cm (55 inch)",
+                     Canonical(brand="sony", family="bravia 3", screen_in=55), True)
+    m = decide(src, [weak, good])
+    assert m.decision == MATCH and m.candidate is good and not m.colour_fallback
+    r = to_result(FLIPKART, m, [OK], "Black")
+    assert r.outcome == Outcome.OUT_OF_STOCK and r.colour_fallback_note is None
+
+
+def test_fix1_fallback_tie_group_prefers_in_stock():
+    src = phone_src(colour="Titanium Black")
+    m = decide(src, [c(colour="White", in_stock=False), c(colour="Sky Blue", in_stock=True)])
+    assert m.decision == MATCH and m.colour_fallback and m.candidate.canon.colour == "Sky Blue"
+    r = to_result(FLIPKART, m, [OK], "Titanium Black")
+    assert r.outcome == Outcome.IN_STOCK
+    assert r.colour_fallback_note == "Not available in Titanium Black; showing Sky Blue"
+
+
+def test_fix1_fallback_never_picks_outside_tie_group():
+    src = phone_src(colour="Titanium Black", model_code="SM-S948B")
+    strong = c(colour="White", in_stock=False, model_code="SM-S948B")
+    weak = c(colour="Sky Blue", in_stock=True)
+    m = decide(src, [weak, strong])
+    assert m.candidate is strong and m.colour_fallback
+    assert to_result(FLIPKART, m, [OK], "Titanium Black").outcome == Outcome.OUT_OF_STOCK
+
+
+def test_fix1_matched_on_without_model_code():
+    m = decide(phone_src(), [c(colour="Black", model_code="SM-S948BZKCINS")])
+    r = to_result(FLIPKART, m, [OK], "Black")
+    assert "model" not in r.reason
+    assert r.reason == "Matched on Galaxy S26 Ultra, 12GB/512GB, Black"
+    src = phone_src(); src.canon.ean = "8806097852605"
+    cand = c(); cand.canon.ean = "8806097852605"
+    assert decide(src, [cand]).reason == "Matched on barcode, 12GB/512GB, Black"
+
+
+def test_fix1_user_facing_labels_and_empty_statuses():
+    m = decide(phone_src(storage=None), croma_candidates())
+    assert to_result(CROMA, m, [OK], "Black").reason == "Couldn't read storage on Amazon"
+    m = decide(phone_src(), [c(ram=None)])
+    assert to_result(FLIPKART, m, [OK], "Black").reason == "Listing doesn't show RAM"
+    assert to_result(CROMA, decide(phone_src(), []), [], "Black").outcome == Outcome.COULDNT_CHECK

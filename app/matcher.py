@@ -132,28 +132,55 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
     pool, fallback = survivors, False
     sk = colour_key(s.colour)
     if cat in (Category.PHONE, Category.TV) and sk:
-        preferred = [c for c in survivors if colour_key(c.canon.colour) == sk]
-        if preferred:
-            pool = preferred
+        same = [c for c in survivors if colour_key(c.canon.colour) == sk]
+        unknown = [c for c in survivors if colour_key(c.canon.colour) is None]
+        other = [c for c in survivors if colour_key(c.canon.colour) not in (None, sk)]
+        if same:
+            pool = same
+        elif unknown and other:
+            top = max(survivors, key=lambda c: score(s, c, cat))
+            return Match(Decision.AMBIGUOUS, top, "Colour unclear on this platform",
+                         False, survivors, **base)
+        elif unknown:
+            pool = unknown
         else:
-            fallback = True
-    scored = sorted(pool, key=lambda c: -score(s, c, cat))
+            pool, fallback = other, True
+    scores = {id(c): score(s, c, cat) for c in pool}
+    scored = sorted(pool, key=lambda c: -scores[id(c)])
     if fallback:
+        # only candidates within the margin of the best are eligible; among them
+        # prefer in-stock, then same base colour, then score
+        best = scores[id(scored[0])]
+        group = [c for c in scored if best - scores[id(c)] < MARGIN]
         sb = base_colour(s.colour) or s.base_colour
-        scored = sorted(scored, key=lambda c: (_stock_rank(c), not (sb and c.canon.base_colour == sb)))
+        scored = sorted(group, key=lambda c: (_stock_rank(c), not (sb and c.canon.base_colour == sb),
+                                              -scores[id(c)]))
     top = scored[0]
 
     if src.missing_required:
-        return Match(Decision.AMBIGUOUS, top, "source missing: " + ", ".join(src.missing_required),
+        return Match(Decision.AMBIGUOUS, top, "Couldn't read " + _labels(src.missing_required) + " on Amazon",
                      fallback, pool, **base)
     if len(scored) >= 2 and not fallback:
-        if score(s, top, cat) - score(s, scored[1], cat) < MARGIN:
+        if scores[id(top)] - scores[id(scored[1])] < MARGIN:
             return Match(Decision.AMBIGUOUS, top, "tie", fallback, pool, **base)
     miss = missing_required(top.canon, cat)
     if miss:
-        return Match(Decision.AMBIGUOUS, top, "candidate missing: " + ", ".join(miss),
+        return Match(Decision.AMBIGUOUS, top, "Listing doesn't show " + _labels(miss),
                      fallback, pool, **base)
     return Match(Decision.MATCH, top, _matched_on(s, top, cat), fallback, pool, **base)
+
+
+_LABELS = {"ram_gb": "RAM", "storage_gb": "storage", "screen_in": "screen size", "base_colour": "colour",
+           "colour": "colour", "family": "model", "product_type": "product type", "brand": "brand"}
+
+
+def _labels(fields: list[str]) -> str:
+    out = []
+    for f in fields:
+        lab = _LABELS.get(f, f.replace("_", " "))
+        if lab not in out:
+            out.append(lab)
+    return ", ".join(out)
 
 
 def resolve_tie(m: Match, chosen: Candidate | None) -> Match:
@@ -169,9 +196,13 @@ def resolve_tie(m: Match, chosen: Candidate | None) -> Match:
 
 def _matched_on(s: Canonical, cand: Candidate, cat: Category | None) -> str:
     c, facts = cand.canon, []
-    code = s.model_code or c.model_code
-    if code:
-        facts.append(f"model {code}")
+    sm, cm = model_base(s.model_code), model_base(c.model_code)
+    if _both(sm, cm) and sm == cm:
+        facts.append(f"model {c.model_code}")
+    elif _both(s.ean, c.ean) and s.ean == c.ean:
+        facts.append("barcode")
+    elif c.family or s.family:
+        facts.append((c.family or s.family).title())
     if cat == Category.PHONE and c.ram_gb and c.storage_gb:
         facts.append(f"{_fmt(c.ram_gb)}GB/{_fmt(c.storage_gb)}GB")
     if cat == Category.TV and c.screen_in:
@@ -208,7 +239,7 @@ def to_result(platform: Platform, match: Match, statuses: list[FetchStatus],
               src_colour: str | None) -> PlatformResult:
     m, cand = match, match.candidate
     if m.decision == Decision.NONE or cand is None:
-        if any(st in (FetchStatus.BLOCKED, FetchStatus.ERROR) for st in statuses):
+        if not statuses or any(st in (FetchStatus.BLOCKED, FetchStatus.ERROR) for st in statuses):
             return PlatformResult(platform, Outcome.COULDNT_CHECK, None,
                                   f"Couldn't check: {platform.value.capitalize()} was blocked or errored")
         if m.checked == 0:
