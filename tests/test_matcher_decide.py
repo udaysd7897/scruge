@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from app.extract import from_croma
+from app.extract import from_amazon, from_croma
 from app.matcher import Match, decide, resolve_tie, score, to_result
 from app.models import (Candidate, Canonical, Category, Decision, FetchStatus, Outcome, Platform,
                         SourceProduct)
@@ -269,3 +269,15 @@ def test_duplicate_listings_are_one_product():
     assert decide(src, [c(colour="Sky Blue"), c(colour="Sky Blue", url="other")]).decision == AMBIGUOUS
     # source missing required stays ambiguous
     assert decide(phone_src(colour="Sky Blue", storage=None), [a, b]).decision == AMBIGUOUS
+
+
+def test_oneplus15_croma_picks_exact_variant_out_of_stock():
+    # Golden case: Croma lists OnePlus 15 in 4 variants sharing model code CPH2745; only
+    # 12/256 Infinite Black (p/323981, out of stock) is the Amazon product.
+    fx = Path(__file__).parent / "fixtures"
+    item = next(i for i in json.loads((fx / "amz_golden.json").read_text()) if i["asin"] == "B0FTR5NGHJ")
+    src = from_amazon(item)
+    cands = [from_croma(i) for i in json.loads((fx / "croma_golden.json").read_text())]
+    m = decide(src, cands)
+    assert m.decision == Decision.MATCH and m.candidate.url.endswith("/p/323981")
+    assert m.candidate.in_stock is False

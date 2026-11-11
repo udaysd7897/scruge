@@ -61,7 +61,8 @@ def missing_required(c: Canonical, cat: Category) -> list[str]:
 
 
 def _title_family(title: str, brand: str | None) -> str | None:
-    head = (title or "").split("(")[0]
+    # family ends at the first "(", "|" or "," ("OnePlus 15 | 12GB+256GB | Infinite Black | ...")
+    head = re.split(r"[(|,]", title or "")[0]
     if brand:
         head = re.sub(re.escape(brand), " ", head, count=1, flags=re.I)
     head = re.sub(r"\b(?:ai|smartphone|smart ?phone|mobile phone)\b", " ", head, flags=re.I)

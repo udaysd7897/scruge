@@ -70,3 +70,14 @@ def test_accessory_breadcrumbs():
     assert detect_category("Electronics > TV & Home Theater Accessories > Wall Mounts", "TV wall mount") == Category.UNSUPPORTED
     assert detect_category("Electronics > Mobiles & Accessories > Smartphones & Basic Mobiles > Smartphones",
                           "x") == Category.PHONE
+
+
+def _golden_amz(asin):
+    return next(i for i in json.loads(read("amz_golden.json")) if i["asin"] == asin)
+
+
+def test_amazon_family_pipe_separated_title():
+    # "OnePlus 15 | 12GB+256GB | Infinite Black | India's First ..." has no "(": family must stop at "|"
+    sp = from_amazon(_golden_amz("B0FTR5NGHJ"))
+    assert (sp.canon.brand, sp.canon.family, sp.canon.ram_gb, sp.canon.storage_gb, sp.canon.colour) == (
+        "oneplus", "15", 12, 256, "Infinite Black")
