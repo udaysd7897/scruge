@@ -134,7 +134,6 @@ function renderResult(r){
 function handle(ev){
   if(ev.type==="source"){renderSource(ev.data||{});setStatus("Searching other stores\u2026")}
   else if(ev.type==="progress"){if(ev.platform==null)setStatus(ev.message);else renderSearching(ev.platform,ev.message)}
-  else if(false)renderSearching(ev.platform,ev.message);
   else if(ev.type==="result")renderResult(ev.data||{});
   else if(ev.type==="error"){showError(ev.message||"Something went wrong. Please try again.");finish()}
   else if(ev.type==="done")finish();
