@@ -8,6 +8,7 @@ from html import unescape
 from app.models import Candidate, Canonical, Category, Platform, SourceProduct
 from app.normalize import (
     base_colour, clean_ean, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage, screen_inches,
+    tv_family,
 )
 
 REQUIRED: dict[Category, list[str]] = {
@@ -115,10 +116,11 @@ def from_amazon(item: dict) -> SourceProduct:
     code = _amazon_tv_code(at) if cat == Category.TV else None
     if cat in (Category.SNEAKER, Category.APPAREL):
         family = model_line(title.split("(")[0], raw_brand)
-    elif cat == Category.TV and code:
+    elif cat == Category.TV:
         # TV titles open with the size ("LG 139 cms (55 inches) NU87 ...") and series names differ
-        # per store (Croma "NU870B", Flipkart's Model Name is the code): identify by model number.
-        family = None
+        # per store (Croma "NU870B", Flipkart's Model Name is the code): identify by model number,
+        # and without one fall back to the cleaned series words (or None).
+        family = None if code else tv_family(title, raw_brand)
     else:
         family = _title_family(title, raw_brand)
     canon = Canonical(
@@ -144,7 +146,8 @@ def from_croma(item: dict) -> Candidate:
     ram, storage = parse_gb(sp.get("RAM")), parse_gb(sp.get("Internal Storage"))
     canon = Canonical(
         brand=norm_brand(item.get("brand")),
-        family=norm_family(sp.get("Model Series")),
+        family=(tv_family(sp.get("Model Series"), item.get("brand"))
+                if detect_category(None, title) == Category.TV else norm_family(sp.get("Model Series"))),
         model_code=sp.get("Model Number"),
         ram_gb=ram, storage_gb=storage,
         screen_in=screen_inches(sp.get("Screen Size in Inches")),
@@ -218,8 +221,12 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     if ram is None and storage is None:
         ram, storage = parse_ram_storage(p.get("name") or "")
     fk_cat = detect_category(None, p.get("name") or "")
-    fam = (model_line(spec.get("Model Name") or p.get("name") or "", brand)
-           if fk_cat in (Category.SNEAKER, Category.APPAREL) else norm_family(spec.get("Model Name")))
+    if fk_cat in (Category.SNEAKER, Category.APPAREL):
+        fam = model_line(spec.get("Model Name") or p.get("name") or "", brand)
+    elif fk_cat == Category.TV:
+        fam = tv_family(spec.get("Model Name"), brand)
+    else:
+        fam = norm_family(spec.get("Model Name"))
     code = spec.get("Model Number")
     if not code and fk_cat == Category.TV:
         code = model_code_like(spec.get("Model Name"))  # Flipkart TVs put the model code here

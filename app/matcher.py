@@ -29,7 +29,8 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
     if _both(sb, cb) and sb != cb:
         return "brand"
     if src.family and c.family and src.family != c.family:
-        return "family"
+        if cat != Category.TV or not _tv_family_overlap(src.family, c.family, cand.title):
+            return "family"
     sm, cm = model_base(src.model_code), model_base(c.model_code)
     if _both(sm, cm) and sm != cm:
         return "model code"
@@ -56,6 +57,14 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
         if (cat == Category.APPAREL or no_style) and _distinct_veto(src, cand):
             return "distinctive words"
     return None
+
+
+def _tv_family_overlap(a: str, b: str, title: str) -> bool:
+    """TV series names differ per store ("nu87 nano" / "nu870b" / "55nu870bpla"): compatible when a
+    series word of one appears inside the other (or the candidate title)."""
+    ca, cb = a.replace(" ", ""), (b + (title or "")).lower().replace(" ", "")
+    return any(len(t) >= 3 and t in cb for t in a.split()) or \
+        any(len(t) >= 3 and t in ca for t in b.split())
 
 
 def _style_key(code: str) -> str:
@@ -170,6 +179,8 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
             top = min(group, key=lambda c: (c.in_stock is not True, c.price is None,
                                             c.price or 0, -scores[id(c)]))
     miss = _unconfirmed(s, top, cat)
+    if cat == Category.TV and not s.model_code:
+        return Match(Decision.AMBIGUOUS, top, "Couldn't read model number on Amazon", fallback, pool, **base)
     if miss:
         return Match(Decision.AMBIGUOUS, top, "Listing doesn't show " + _labels(miss),
                      fallback, pool, **base)
@@ -180,8 +191,8 @@ def _unconfirmed(s: Canonical, cand: Candidate, cat: Category) -> list[str]:
     """Required fields the listing doesn't show. A TV identified by model number on Amazon can only
     be confirmed by a listing that shows a model number too."""
     miss = missing_required(cand.canon, cat)
-    if cat == Category.TV and s.model_code and not cand.canon.model_code:
-        miss.append("model_code")
+    if cat == Category.TV and not (s.model_code and cand.canon.model_code):
+        miss.append("model_code")  # no model number on one side: identity can't be confirmed
     return miss
 
 

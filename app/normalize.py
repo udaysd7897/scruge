@@ -202,6 +202,29 @@ def clean_ean(s: str | None) -> str | None:
     return d if (10 - total % 10) % 10 == int(d[-1]) else None
 
 
+_TV_SIZE = r"\d+(?:\.\d+)?\s*(?:cms?|centimet(?:er|re)s?|inch(?:es)?|in\b|\")"
+TV_GENERIC_WORDS = {"smart", "led", "lcd", "tv", "television", "4k", "8k", "ultra", "hd", "uhd", "fhd", "full",
+                    "ready", "google", "android", "webos", "tizen", "ai", "series", "edition", "model", "new",
+                    "x", "with"}
+
+
+def tv_family(title: str | None, brand: str | None) -> str | None:
+    """TV series/family from a title or spec value: sizes, resolutions and generic TV words removed.
+    Keeps series words ("crystal", "bravia", "qned", "nano") and codes. None if nothing is left."""
+    t = title or ""
+    t = re.sub(r"\([^)]*(?:" + _TV_SIZE + r"|\d+\s*x\s*\d+)[^)]*\)", " ", t, flags=re.I)
+    t = re.split(r"[(|,]|\bwith\b", t, flags=re.I)[0]
+    t = re.sub(_TV_SIZE, " ", t, flags=re.I)
+    for b in (brand, norm_brand(brand)):
+        if b:
+            t = re.sub(r"\b" + re.escape(b) + r"\b", " ", t, flags=re.I)
+    fam = norm_family(t)
+    if not fam:
+        return None
+    toks = [w for w in fam.split() if w not in TV_GENERIC_WORDS and not w.isdigit()]
+    return " ".join(toks) or None
+
+
 def is_accessory(title: str) -> bool:
     t = (title or "").lower()
     if set(re.findall(r"[a-z0-9]+", t)) & ACCESSORY_TOKENS:

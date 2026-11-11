@@ -315,3 +315,24 @@ def test_tv_tiebreak_cannot_pick_listing_without_model_number():
     m = decide(src, [a, b])
     assert (m.decision, m.reason) == (Decision.AMBIGUOUS, "tie")
     assert resolve_tie(m, a).decision == Decision.AMBIGUOUS
+
+
+def _lg_without_model_number():
+    fx = Path(__file__).parent / "fixtures"
+    item = next(i for i in json.loads((fx / "amz_golden.json").read_text()) if i["asin"] == "B0GTZ8WM5W")
+    drop = {"Model Number", "Model Name", "Manufacturer Part Number", "Item model number"}
+    item = {**item, "attributes": [a for a in item["attributes"] if a["key"] not in drop]}
+    return from_amazon(item)
+
+
+def test_tv_without_amazon_model_number_is_not_wrongly_not_listed():
+    # Reviewer repro: the title head is a size ("LG 139 cms"); it must not become a family that
+    # vetoes the real Flipkart listing (Model Name 55NU870BPLA).
+    from app.extract import from_flipkart_page
+    src = _lg_without_model_number()
+    assert src.canon.model_code is None and src.canon.family not in ("139 cms", "139")
+    html = (Path(__file__).parent / "fixtures" / "fk_tv_lg_nu870.html").read_text()
+    [fk] = from_flipkart_page(html, "https://www.flipkart.com/x/p/itmee9cd7f3011a2?pid=TVSHMYS2G69WGGAK")
+    m = decide(src, [fk])
+    assert m.decision == Decision.AMBIGUOUS and m.candidate is fk
+    assert m.reason == "Couldn't read model number on Amazon"

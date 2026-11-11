@@ -107,9 +107,13 @@ colour → base colour, EAN checksum, accessory detection and distinctive words.
 - Amazon often lacks a model number/EAN for phones, so phones are matched on family + RAM +
   storage + colour. Apple's Amazon listings don't state RAM, so iPhones end up as
   "Possible match – verify".
-- A TV whose Amazon page has no model number is matched on family + size only. It usually
-  ends up as "Possible match". Model numbers have to match exactly (after removing spaces), so a
-  regional suffix on one store gives "Not listed" rather than a guess.
+- A TV whose Amazon page has no model number is never answered confidently. Its family comes
+  from the title with sizes and generic words removed ("LG 139 cms (55 inches) NU87 AI Series
+  Nano ..." becomes "nu87 nano"). Listings are filtered by brand, screen size and overlapping
+  series words, and the closest one is shown as "Possible match – verify" ("Couldn't read model
+  number on Amazon"). A TV listing without a model number is likewise never confirmed. When both
+  sides have one, the model numbers must match exactly (after removing spaces), so a regional
+  suffix on one store gives "Not listed" rather than a guess.
 - Flipkart/Myntra markup can change, or they can start rate-limiting. Failures show as
   "Couldn't check", never as "Not listed". One live Flipkart run hit the 20 s budget and
   came back "Couldn't check".

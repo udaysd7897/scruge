@@ -124,3 +124,13 @@ def test_pack_count():
     assert pack_count("Puma Polo 3-Pack") == 3
     assert pack_count("Set of 4 tees") == 4
     assert pack_count("Puma Polo") == 1
+
+
+def test_tv_family_strips_sizes_and_generic_words():
+    from app.normalize import tv_family
+    assert tv_family("LG 139 cms (55 inches) NU87 AI Series Nano 4K Ultra HD (3840 x 2160) Smart webOS LED TV", "LG") == "nu87 nano"
+    assert tv_family("Samsung 55 inch (138cm) Crystal UHD 4K Vision AI 2026 Smart TV | 30W Speakers", "Samsung") == "crystal vision"
+    assert tv_family("Sony 108 cm (43 inches) Smartchoice BRAVIA 2M2 Series 4K Ultra HD Smart LED Google TV", "Sony") == "smartchoice bravia 2m2"
+    assert tv_family("LG 139 cms (55 inches)", "LG") is None
+    assert tv_family("55NU870BPLA", "LG") == "55nu870bpla"
+    assert tv_family("NU870B", None) == "nu870b"
