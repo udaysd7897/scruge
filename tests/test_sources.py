@@ -167,6 +167,13 @@ async def test_run_actor_no_key(monkeypatch):
     assert st == S.ERROR and items == [] and not calls
 
 
+async def test_run_actor_offline_cache_miss_is_error(monkeypatch):
+    monkeypatch.setattr(apify, "OFFLINE", True)
+    calls = []
+    st, items = await run_actor(apify_client([{"a": 1}], calls), "x~off", {"k": 9})
+    assert st == S.ERROR and items == [] and not calls
+
+
 async def test_get_source():
     calls = []
     c = apify_client(json.loads(read("amz_apify.json")), calls)

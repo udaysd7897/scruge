@@ -1,0 +1,142 @@
+{
+  "_readme": "Hand-checked expectations. 'ids' = substrings identifying the expected listing in the result URL (Flipkart pid, Croma /p/<id>, Myntra product id). Stock is a snapshot taken 2026-11-11 from the captured pages. 'pending' cases are listed for future capture and are not run.",
+  "cases": [
+    {
+      "id": "phone-s26u-skyblue-512",
+      "category": "phone",
+      "url": "https://www.amazon.in/dp/B0GL8GXNTS",
+      "expected": {
+        "flipkart": {
+          "outcome": "In stock",
+          "ids": [
+            "MOBHKGAPHZHYA5GQ"
+          ],
+          "note": "Flipkart pid MOBHKGAPHZHYA5GQ = Galaxy S26 Ultra 12/512 Sky Blue, InStock. Traps on the same itm: Black/White/Cobalt Violet 512 and 256GB variants; S26 (non-Ultra) Sky Blue 512 (MOBHKGAPAZ3N7GNF); back-panel accessories."
+        },
+        "croma": {
+          "outcome": "In stock",
+          "ids": [
+            "/p/327248",
+            "/p/321503"
+          ],
+          "note": "Croma lists S26 Ultra 12/512 Sky Blue twice (327248, 321503; same SM-S948BLBCINS + EAN) - one product, in stock. Traps: 256GB Sky Blue (327243, 321491), S26 12/512 Sky Blue (327230, 321485)."
+        }
+      }
+    },
+    {
+      "id": "phone-s26plus-black-512",
+      "category": "phone",
+      "url": "https://www.amazon.in/dp/B0GL8J486T",
+      "expected": {
+        "flipkart": {
+          "outcome": "Not listed",
+          "ids": [],
+          "note": "Searches 'samsung galaxy s26 plus 12gb 512gb black', 'samsung galaxy s26 plus', 'galaxy s26+ 5g', 'samsung s26 plus mobile' return S26 / S26 Ultra / S26 FE / S25 Plus handsets and S26+ back panels/lens guards, no S26+ handset."
+        },
+        "croma": {
+          "outcome": "Not listed",
+          "ids": [],
+          "note": "Croma searches 'samsung galaxy s26 plus 12gb 512gb black' and 'samsung galaxy s26 plus' return only S22/S23/S23 Ultra/Z Fold4 (adjacent-model noise, spec section 11)."
+        }
+      }
+    },
+    {
+      "id": "phone-oneplus15-black-256",
+      "category": "phone",
+      "url": "https://www.amazon.in/dp/B0FTR5NGHJ",
+      "expected": {
+        "flipkart": {
+          "outcome": "Out of stock",
+          "ids": [
+            "MOBHHNF53GG7JW7S"
+          ],
+          "note": "Flipkart pid MOBHHNF53GG7JW7S = OnePlus 15 5G 12/256 Infinite Black, CPH2745, availability OutOfStock. Traps: OnePlus N6 / Nord 6 / Nord CE6 (Lite) listings."
+        },
+        "croma": {
+          "outcome": "Out of stock",
+          "ids": [
+            "/p/323981"
+          ],
+          "note": "Croma 323981 = OnePlus 15 12/256 Infinite Black, in_stock false. Same model code CPH2745 for 12/256 Sand Storm (323985, in stock), 12/256 Ultra Violet (323986), 16/512 Infinite Black (323990) - colour and storage traps."
+        }
+      }
+    },
+    {
+      "id": "tv-lg-55nu87",
+      "category": "tv",
+      "url": "https://www.amazon.in/dp/B0GTZ8WM5W",
+      "expected": {
+        "flipkart": {
+          "outcome": "In stock",
+          "ids": [
+            "TVSHMYS2G69WGGAK"
+          ],
+          "note": "Flipkart pid TVSHMYS2G69WGGAK: spec Model Name 55NU870BPLA, 139 cm (55 inch), Black, InStock. Traps: other LG 55\" TVs (55UA83506LA, 55UA82006LA, QNED65/82/8XA, OLED C5/C6, UR7500, UQ7550)."
+        },
+        "croma": {
+          "outcome": "In stock",
+          "ids": [
+            "/p/323497"
+          ],
+          "note": "Croma 323497 'LG NU870B 139.7 cm (55 inch)', Model Number 55NU870BPLA, in stock. Traps: NU885, QNED70/82, UQ80, UR75, evo AI 55\" models (other model numbers)."
+        }
+      }
+    },
+    {
+      "id": "tv-samsung-55-crystal-2026",
+      "category": "tv",
+      "url": "https://www.amazon.in/dp/B0GYRRLP87",
+      "expected": {},
+      "pending": "Amazon source not captured: Apify budget for this task was exhausted"
+    },
+    {
+      "id": "tv-sony-43-2m2",
+      "category": "tv",
+      "url": "https://www.amazon.in/dp/B0F7X29WXX",
+      "expected": {},
+      "pending": "Amazon source not captured: Apify budget for this task was exhausted"
+    },
+    {
+      "id": "sneaker-adidas-grandcourt3-burgundy",
+      "category": "sneaker",
+      "url": "https://www.amazon.in/dp/B0F2FF2X9M",
+      "expected": {},
+      "pending": "Amazon source not captured: Apify budget for this task was exhausted"
+    },
+    {
+      "id": "sneaker-adidas-grandcourt3-white",
+      "category": "sneaker",
+      "url": "https://www.amazon.in/dp/B0F2FC5C32",
+      "expected": {},
+      "pending": "Amazon source not captured: Apify budget for this task was exhausted"
+    },
+    {
+      "id": "sneaker-nike-courtvision-lo-nn",
+      "category": "sneaker",
+      "url": "https://www.amazon.in/dp/B0983NTYZ5",
+      "expected": {},
+      "pending": "Amazon source not captured: Apify budget for this task was exhausted"
+    },
+    {
+      "id": "apparel-puma-tipped-polo",
+      "category": "apparel",
+      "url": "https://www.amazon.in/dp/B0BFX577X7",
+      "expected": {},
+      "pending": "Amazon source not captured: Apify budget for this task was exhausted"
+    },
+    {
+      "id": "apparel-puma-teamliga-jersey",
+      "category": "apparel",
+      "url": "https://www.amazon.in/dp/B09168ZVDQ",
+      "expected": {},
+      "pending": "Amazon source not captured: Apify budget for this task was exhausted"
+    },
+    {
+      "id": "apparel-uspa-slim-polo",
+      "category": "apparel",
+      "url": "https://www.amazon.in/dp/B0C4NWW6XF",
+      "expected": {},
+      "pending": "Amazon source not captured: Apify budget for this task was exhausted"
+    }
+  ]
+}

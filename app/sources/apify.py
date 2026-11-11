@@ -10,6 +10,8 @@ import httpx
 from app.models import FetchStatus
 
 CACHE_DIR = Path(__file__).resolve().parents[2] / ".cache" / "apify"
+# Cache-only mode (golden-set replays): a cache miss is an ERROR instead of a paid Apify call.
+OFFLINE = os.environ.get("APIFY_OFFLINE") == "1"
 
 
 def _cache_path(actor: str, payload: dict) -> Path:
@@ -29,7 +31,7 @@ async def run_actor(
     except (OSError, ValueError):
         pass
     key = os.environ.get("APIFY_KEY")
-    if not key:
+    if OFFLINE or not key:
         return FetchStatus.ERROR, []
     url = f"https://api.apify.com/v2/acts/{actor}/run-sync-get-dataset-items?timeout={timeout_s}"
     try:
