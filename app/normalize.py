@@ -50,7 +50,7 @@ COLOUR_PHRASES: dict[str, str] = {
     "multi colour": "multi",
 }
 
-ACCESSORY_TOKENS = {"case", "cover", "protector", "skin", "holder", "stand", "mount", "adapter"}
+ACCESSORY_TOKENS = {"case", "cover", "protector", "skin", "adapter"}
 ACCESSORY_PATTERNS = [re.compile(p) for p in (
     r"\bscreen (?:protector|guard)\b", r"\btempered glass\b", r"\bback (?:cover|case|panel)\b",
     r"\blens (?:protector|glass)\b", r"\bcamera ring\b", r"\bphone case\b",
