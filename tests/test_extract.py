@@ -81,3 +81,19 @@ def test_amazon_family_pipe_separated_title():
     sp = from_amazon(_golden_amz("B0FTR5NGHJ"))
     assert (sp.canon.brand, sp.canon.family, sp.canon.ram_gb, sp.canon.storage_gb, sp.canon.colour) == (
         "oneplus", "15", 12, 256, "Infinite Black")
+
+
+def test_amazon_tv_identity_from_model_number():
+    # "LG 139 cms (55 inches) NU87 AI Series ..." — the title head is a size, not a family;
+    # the TV is identified by its model number attribute instead.
+    sp = from_amazon(_golden_amz("B0GTZ8WM5W"))
+    assert sp.category == Category.TV
+    assert (sp.canon.brand, sp.canon.model_code, sp.canon.family, sp.canon.screen_in) == (
+        "lg", "55NU870BPLA", None, 55)
+    assert sp.missing_required == []
+
+
+def test_flipkart_tv_model_name_is_model_code():
+    url = "https://www.flipkart.com/lg-139-cm-55-inch/p/itmee9cd7f3011a2?pid=TVSHMYS2G69WGGAK"
+    [fk] = from_flipkart_page(read("fk_tv_lg_nu870.html"), url)
+    assert (fk.canon.brand, fk.canon.model_code, fk.canon.screen_in, fk.in_stock) == ("lg", "55NU870BPLA", 55, True)

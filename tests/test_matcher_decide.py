@@ -281,3 +281,37 @@ def test_oneplus15_croma_picks_exact_variant_out_of_stock():
     m = decide(src, cands)
     assert m.decision == Decision.MATCH and m.candidate.url.endswith("/p/323981")
     assert m.candidate.in_stock is False
+
+
+def test_lg_tv_croma_matches_by_model_number():
+    # Golden case: Croma "LG NU870B 139.7 cm (55 inch)" (Model Series NU870B, Model Number
+    # 55NU870BPLA) is the Amazon TV; other LG 55" TVs carry other model numbers.
+    fx = Path(__file__).parent / "fixtures"
+    item = next(i for i in json.loads((fx / "amz_golden.json").read_text()) if i["asin"] == "B0GTZ8WM5W")
+    src = from_amazon(item)
+    cands = [from_croma(i) for i in json.loads((fx / "croma_golden.json").read_text())]
+    m = decide(src, cands)
+    assert m.decision == Decision.MATCH and m.candidate.url.endswith("/p/323497")
+
+
+def test_tv_with_model_number_never_confirms_a_listing_without_one():
+    fx = Path(__file__).parent / "fixtures"
+    item = next(i for i in json.loads((fx / "amz_golden.json").read_text()) if i["asin"] == "B0GTZ8WM5W")
+    src = from_amazon(item)
+    other = Candidate(Platform.FLIPKART, "https://fk/x", "LG AI TV UA8200 139 cm (55 inch) Ultra HD (4K) LED Smart TV",
+                      Canonical(brand="lg", family="ai tv ua8200", screen_in=55, colour="Black"), True)
+    m = decide(src, [other])
+    assert m.decision == Decision.AMBIGUOUS and "model number" in m.reason
+
+
+def test_tv_tiebreak_cannot_pick_listing_without_model_number():
+    fx = Path(__file__).parent / "fixtures"
+    item = next(i for i in json.loads((fx / "amz_golden.json").read_text()) if i["asin"] == "B0GTZ8WM5W")
+    src = from_amazon(item)
+    a = Candidate(Platform.FLIPKART, "https://fk/a", "LG AI TV UA8200 139 cm (55 inch)",
+                  Canonical(brand="lg", family="ai tv ua8200", screen_in=55, colour="Black"), True)
+    b = Candidate(Platform.FLIPKART, "https://fk/b", "LG UR7500 139 cm (55 inch)",
+                  Canonical(brand="lg", family="lg ur 7500 series", screen_in=55, colour="Black"), True)
+    m = decide(src, [a, b])
+    assert (m.decision, m.reason) == (Decision.AMBIGUOUS, "tie")
+    assert resolve_tie(m, a).decision == Decision.AMBIGUOUS

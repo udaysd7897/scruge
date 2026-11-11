@@ -169,11 +169,20 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
                 return Match(Decision.AMBIGUOUS, top, "tie", fallback, pool, **base)
             top = min(group, key=lambda c: (c.in_stock is not True, c.price is None,
                                             c.price or 0, -scores[id(c)]))
-    miss = missing_required(top.canon, cat)
+    miss = _unconfirmed(s, top, cat)
     if miss:
         return Match(Decision.AMBIGUOUS, top, "Listing doesn't show " + _labels(miss),
                      fallback, pool, **base)
     return Match(Decision.MATCH, top, _matched_on(s, top, cat), fallback, pool, **base)
+
+
+def _unconfirmed(s: Canonical, cand: Candidate, cat: Category) -> list[str]:
+    """Required fields the listing doesn't show. A TV identified by model number on Amazon can only
+    be confirmed by a listing that shows a model number too."""
+    miss = missing_required(cand.canon, cat)
+    if cat == Category.TV and s.model_code and not cand.canon.model_code:
+        miss.append("model_code")
+    return miss
 
 
 def _dup_code(c: Candidate) -> str | None:
@@ -194,7 +203,7 @@ def _all_duplicates(group: list[Candidate]) -> bool:
 
 
 _LABELS = {"ram_gb": "RAM", "storage_gb": "storage", "screen_in": "screen size", "base_colour": "colour",
-           "colour": "colour", "family": "model", "product_type": "product type", "brand": "brand"}
+           "colour": "colour", "family": "model", "model_code": "model number", "product_type": "product type", "brand": "brand"}
 
 
 def _labels(fields: list[str]) -> str:
@@ -211,7 +220,7 @@ def resolve_tie(m: Match, chosen: Candidate | None) -> Match:
         return m
     if chosen is None or not any(chosen is c for c in m.survivors):
         return m
-    if m.category and missing_required(chosen.canon, m.category):
+    if m.category and _unconfirmed(m.src or Canonical(), chosen, m.category):
         return m
     return Match(Decision.MATCH, chosen, _matched_on(m.src or Canonical(), chosen, m.category),
                  m.colour_fallback, m.survivors, m.src, m.category, m.src_missing, m.checked)
