@@ -196,7 +196,8 @@ def test_e2e_apparel():
                     "Tshirts", True),
                    ("Allen Solly Men Black Solid Regular Fit Polo T-shirt", "Allen Solly", "Black", "Tshirts", True))
     r = _e2e(sp, MYNTRA, cands)
-    assert r.outcome == Outcome.IN_STOCK and r.url == cands[0].url
+    # right listing found, but Myntra shows no style code: Possible until confirm.py confirms it
+    assert r.outcome == Outcome.POSSIBLE and r.url == cands[0].url
 
 
 # ------------------------------------------------------------------ 5. one side without distinctive words

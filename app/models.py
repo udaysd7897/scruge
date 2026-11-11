@@ -52,6 +52,9 @@ class Canonical:
     style_code: str | None = None  # brand style/article code (Puma 52885601, Nike HJ5228-101)
     model_name: str | None = None  # brand's line name when the listing states it ("tad essential")
     official_name: str | None = None  # brand-site product name looked up by style code
+    gender: str | None = None  # men / women / kids
+    mrp: int | None = None
+    maker: str | None = None  # manufacturer text, normalised (Amazon "Manufacturer", Myntra manufacturerInfo)
     product_type: str | None = None
     pack_count: int = 1
     ean: str | None = None
@@ -67,6 +70,8 @@ class Candidate:
     in_stock: bool | None
     price: int | None = None
     variant_group: str | None = None
+    image: str | None = None
+    confirmed: bool = False  # no-code listing confirmed by MRP + manufacturer + photo (app/confirm.py)
 
 
 @dataclass

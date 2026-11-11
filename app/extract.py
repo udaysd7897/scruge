@@ -150,6 +150,23 @@ def _amazon_model_name(at: dict[str, str]) -> str | None:
     return v.lower() if v and not style_code_like(v) else None
 
 
+def norm_maker(s: str | None) -> str | None:
+    """Manufacturer text up to its 6-digit PIN code, lowercase words only: Amazon's "Aryan Apparels Private
+    Limited Plot no 266 ... Manesar 122051, Puma" equals Myntra's "Aryan Apparels ... Manesar  122051 , India"."""
+    s = (s or "").lower()
+    m = re.search(r"\b\d{6}\b", s)
+    s = s[: m.end()] if m else s
+    return " ".join(re.findall(r"[a-z0-9]+", s)) or None
+
+
+def _gender(s: str | None) -> str | None:
+    s = (s or "").lower()
+    for g in ("women", "men", "unisex"):
+        if re.search(rf"\b{g}\b", s):
+            return g
+    return "kids" if re.search(r"\b(kids?|boys?|girls?)\b", s) else None
+
+
 def _amazon_tv_code(at: dict[str, str], screen_in: int | None) -> str | None:
     for k in ("Model Number", "Manufacturer Part Number", "Model Name", "Item model number"):
         code = model_code_like(at.get(k), screen_in)
@@ -199,6 +216,9 @@ def from_amazon(item: dict) -> SourceProduct:
         product_type=product_type(title, item.get("breadCrumbs")) if cat == Category.APPAREL else None,
         style_code=_amazon_style(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
         model_name=_amazon_model_name(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
+        gender=_gender(at.get("Department")) if cat in (Category.SNEAKER, Category.APPAREL) else None,
+        mrp=int((item.get("listPrice") or {}).get("value") or 0) or None,
+        maker=norm_maker(at.get("Manufacturer Contact Information") or at.get("Manufacturer")),
         title=title,
     )
     img = item.get("thumbnailImage") or (item.get("highResolutionImages") or [None])[0]
@@ -361,11 +381,30 @@ def from_myntra_search(html: str) -> list[Candidate]:
             # Myntra files polos under "Tshirts": the name decides first, the article type second
             product_type=(None if "shoe" in art or "sneaker" in art
                           else product_type(name, None) or _MYNTRA_TYPES.get(art)),
+            gender=_gender(p.get("gender")),
+            mrp=int(p["mrp"]) if p.get("mrp") else None,
             title=name,
         )
         inv = [x for x in p.get("inventoryInfo") or [] if isinstance(x, dict)]
         out.append(Candidate(Platform.MYNTRA, "https://www.myntra.com/" + (p.get("landingPageUrl") or ""),
                              name, canon, any(x.get("available") for x in inv) if inv else None,
                              int(p["price"]) if p.get("price") is not None else None,
-                             str(p.get("productId")) if p.get("productId") is not None else None))
+                             str(p.get("productId")) if p.get("productId") is not None else None,
+                             image=(p.get("searchImage") or "").replace("http://", "https://") or None))
     return out
+
+
+def myntra_pdp_maker(html: str) -> str | None:
+    """Manufacturer text from a Myntra product page (window.__myx.pdpData sizes[].sizeSellerData[])."""
+    i = html.find("window.__myx = ")
+    if i < 0:
+        return None
+    try:
+        d, _ = json.JSONDecoder().raw_decode(html[i + len("window.__myx = "):])
+    except ValueError:
+        return None
+    for sz in ((d.get("pdpData") or {}).get("sizes") or []):
+        for ssd in sz.get("sizeSellerData") or []:
+            if ssd.get("manufacturerInfo"):
+                return norm_maker(ssd["manufacturerInfo"])
+    return None

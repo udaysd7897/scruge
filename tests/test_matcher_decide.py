@@ -144,12 +144,11 @@ def test_source_missing_reason_and_none():
 
 
 def test_resolve_tie():
+    # apparel without a shared style code is never confident on names alone: no tie-break upgrade
     a, b = polo_c("a"), polo_c("b")
     m = decide(polo_src(), [a, b])
-    assert m.reason == "tie" and set(x.url for x in m.survivors) == {a.url, b.url}
-    assert resolve_tie(m, b).decision == MATCH and resolve_tie(m, b).candidate is b
-    assert resolve_tie(m, None).decision == AMBIGUOUS
-    assert resolve_tie(m, polo_c("z")).decision == AMBIGUOUS
+    assert m.decision == AMBIGUOUS and m.reason.startswith("No style code")
+    assert resolve_tie(m, b).decision == AMBIGUOUS
     # source missing required → never resolved
     ms = decide(phone_src(storage=None), croma_candidates())
     assert resolve_tie(ms, ms.survivors[0]).decision == AMBIGUOUS

@@ -7,7 +7,8 @@ from enum import Enum
 
 from app.brandsite import official_name
 from app.llm import llm_tiebreak
-from app.matcher import Match, decide, resolve_tie, to_result
+from app.confirm import confirm
+from app.matcher import NEEDS_CONFIRM, Match, decide, resolve_tie, to_result
 from app.models import Candidate, Category, Decision, FetchStatus, Outcome, Platform, PlatformResult, SourceProduct
 from app.queries import ladder
 from app.sources.amazon import SourceError, get_source
@@ -80,6 +81,12 @@ async def run_platform(client, src: SourceProduct, platform: Platform) -> Platfo
         if m.decision == Decision.AMBIGUOUS and m.reason == "tie":
             chosen = await llm_tiebreak(src, m.survivors)
             m = resolve_tie(m, chosen)
+        if m.decision == Decision.AMBIGUOUS and m.reason == NEEDS_CONFIRM:
+            # no shared style code: MRP + manufacturer + photo may confirm it; on timeout it stays Possible
+            try:
+                m = await asyncio.wait_for(confirm(client, src, m), 45)
+            except (asyncio.TimeoutError, TimeoutError):
+                pass
         return to_result(platform, m, statuses, src.canon.colour)
     except Exception:
         return _went_wrong(platform)

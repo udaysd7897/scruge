@@ -45,6 +45,8 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
         if _both(src.screen_in, c.screen_in) and abs(src.screen_in - c.screen_in) > 1:
             return "screen size"
     if cat in (Category.SNEAKER, Category.APPAREL):
+        if _both(src.gender, c.gender) and "unisex" not in (src.gender, c.gender) and src.gender != c.gender:
+            return "gender"
         if cat == Category.APPAREL and _both(src.product_type, c.product_type) \
                 and src.product_type != c.product_type:
             return "type"
@@ -74,16 +76,22 @@ def _doubt(src: Canonical, cand: Candidate, cat: Category) -> str | None:
         return None
     if same_style(src, cand.canon):
         return None  # the brand style code proves the product
-    a, b = distinctive_words(src.title, src.brand), distinctive_words(cand.title, cand.canon.brand)
+    a, b = distinctive_words(_src_text(src), src.brand), distinctive_words(cand.title, cand.canon.brand)
     if not a or not b:
         return "Title too generic to confirm the model"
     # listing words the Amazon title never mentions ("Graphic Printed", "React"): a different design
-    src_toks = set(re.findall(r"[a-z0-9]+", (src.title or "").lower().replace("t-shirt", "tshirt")))
+    src_toks = set(re.findall(r"[a-z0-9]+", _src_text(src).lower().replace("t-shirt", "tshirt")))
     if b - src_toks - DESCRIPTOR_WORDS:
         return "Listing title has words the Amazon title doesn't"
     if cat == Category.SNEAKER and src.family and cand.canon.family and src.family != cand.canon.family:
         return "Model name differs slightly on this listing"
+    if cat == Category.APPAREL and not cand.confirmed:
+        # no shared style code (Myntra never shows one): name agreement alone is not proof
+        return NEEDS_CONFIRM
     return None
+
+
+NEEDS_CONFIRM = "No style code on this listing: matched by name only"
 
 
 def _tv_family_overlap(a: str, b: str, title: str) -> bool:
@@ -98,10 +106,16 @@ def _style_key(code: str) -> str:
     return re.sub(r"[\s_]+", "", code.upper().replace("/", "-"))
 
 
+def _src_text(src: Canonical) -> str:
+    """What the listing title is compared with: the brand's official product name when known (Amazon's
+    fashion titles are generic: "Puma Men Polyester Solid Regular Fit T-Shirt"), else Amazon's title."""
+    return f"{src.brand or ''} {src.official_name}".strip() if src.official_name else src.title
+
+
 def _distinct_veto(src: Canonical, cand: Candidate) -> bool:
-    if not src.title:
+    if not _src_text(src):
         return False
-    a = distinctive_words(src.title, src.brand)
+    a = distinctive_words(_src_text(src), src.brand)
     b = distinctive_words(cand.title, cand.canon.brand)
     if not a or not b:
         # one title is too generic to compare: not a veto; decide() caps it at "Possible match"
@@ -111,7 +125,7 @@ def _distinct_veto(src: Canonical, cand: Candidate) -> bool:
         score = len(a & b) / (m if m >= 2 else len(a | b))
         if score < 0.5:
             return True
-    if src.family:
+    if src.family and not src.official_name:
         toks = set(re.findall(r"[a-z0-9]+", (cand.title or "").lower())) | b
         if not set(src.family.split()) <= toks:
             return True
@@ -186,11 +200,17 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
             pool, fallback = other, True
     doubt = None
     if cat in (Category.SNEAKER, Category.APPAREL):
-        clear = [c for c in pool if _doubt(s, c, cat) is None]
+        doubts = {id(c): _doubt(s, c, cat) for c in pool}
+        clear = [c for c in pool if doubts[id(c)] is None]
+        # listings whose only gap is the missing style code come before ones with other doubts:
+        # confirm.py can still prove them (MRP + manufacturer + photo)
+        name_only = [c for c in pool if doubts[id(c)] == NEEDS_CONFIRM]
         if clear:
             pool = clear
+        elif name_only:
+            pool, doubt = name_only, NEEDS_CONFIRM
         else:
-            doubt = _doubt(s, max(pool, key=lambda c: score(s, c, cat)), cat)
+            doubt = doubts[id(max(pool, key=lambda c: score(s, c, cat)))]
     scores = {id(c): score(s, c, cat) for c in pool}
     scored = sorted(pool, key=lambda c: -scores[id(c)])
     if fallback:
@@ -284,6 +304,8 @@ def _matched_on(s: Canonical, cand: Candidate, cat: Category | None) -> str:
         facts.append("barcode")
     elif same_style(s, c):
         facts.append(f"style {c.style_code}")
+    elif cand.confirmed:
+        facts.append("name, MRP, manufacturer and photo")
     elif c.family or s.family:
         facts.append((c.family or s.family).title())
     if cat == Category.PHONE and c.ram_gb and c.storage_gb:
