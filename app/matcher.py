@@ -138,9 +138,11 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
         if same:
             pool = same
         elif unknown and other:
-            top = max(survivors, key=lambda c: score(s, c, cat))
-            return Match(Decision.AMBIGUOUS, top, "Colour unclear on this platform",
-                         False, survivors, **base)
+            # link the colourless listing: it may be the right colour, the others are not
+            top = max(unknown, key=lambda c: score(s, c, cat))
+            reason = ("Couldn't read " + _labels(src.missing_required) + " on Amazon"
+                      if src.missing_required else "Colour unclear on this platform")
+            return Match(Decision.AMBIGUOUS, top, reason, False, survivors, **base)
         elif unknown:
             pool = unknown
         else:
@@ -239,7 +241,10 @@ def to_result(platform: Platform, match: Match, statuses: list[FetchStatus],
               src_colour: str | None) -> PlatformResult:
     m, cand = match, match.candidate
     if m.decision == Decision.NONE or cand is None:
-        if not statuses or any(st in (FetchStatus.BLOCKED, FetchStatus.ERROR) for st in statuses):
+        if not statuses:
+            return PlatformResult(platform, Outcome.COULDNT_CHECK, None,
+                                  f"Couldn't check {platform.value.capitalize()}: no search was completed")
+        if any(st in (FetchStatus.BLOCKED, FetchStatus.ERROR) for st in statuses):
             return PlatformResult(platform, Outcome.COULDNT_CHECK, None,
                                   f"Couldn't check: {platform.value.capitalize()} was blocked or errored")
         if m.checked == 0:

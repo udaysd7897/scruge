@@ -228,3 +228,21 @@ def test_fix1_user_facing_labels_and_empty_statuses():
     m = decide(phone_src(), [c(ram=None)])
     assert to_result(FLIPKART, m, [OK], "Black").reason == "Listing doesn't show RAM"
     assert to_result(CROMA, decide(phone_src(), []), [], "Black").outcome == Outcome.COULDNT_CHECK
+
+
+def test_fix2_colour_unclear_links_colourless_listing():
+    unknown = c(colour=None, in_stock=False)
+    m = decide(phone_src(), [unknown, c(colour="Sky Blue", in_stock=True)])
+    assert m.decision == AMBIGUOUS
+    assert to_result(FLIPKART, m, [OK], "Black").url == unknown.url
+
+
+def test_fix2_source_missing_beats_colour_unclear():
+    m = decide(phone_src(storage=None), [c(colour=None, storage=None), c(colour="Sky Blue", storage=None)])
+    assert m.decision == AMBIGUOUS
+    assert to_result(FLIPKART, m, [OK], "Black").reason == "Couldn't read storage on Amazon"
+
+
+def test_fix2_empty_statuses_reason():
+    r = to_result(CROMA, decide(phone_src(), []), [], "Black")
+    assert r.reason == "Couldn't check Croma: no search was completed"
