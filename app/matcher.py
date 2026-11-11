@@ -10,7 +10,7 @@ from app.extract import REQUIRED, missing_required
 from app.models import (Candidate, Canonical, Category, Decision, FetchStatus, Outcome, Platform,
                         PlatformResult, SourceProduct)
 from app.normalize import (DESCRIPTOR_WORDS, base_colour, clean_ean, colour_key, distinctive_words, is_accessory,
-                           model_base, norm_brand, pack_count)
+                           model_base, norm_brand, pack_count, tv_code)
 
 
 def _fmt(x) -> str:
@@ -33,9 +33,13 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
     if src.family and c.family and src.family != c.family and cat not in (Category.SNEAKER, Category.APPAREL):
         if cat != Category.TV or not _tv_family_overlap(src.family, c.family, cand.title):
             return "family"
-    sm, cm = model_base(src.model_code), model_base(c.model_code)
-    if _both(sm, cm) and sm != cm:
-        return "model code"
+    if cat == Category.TV and tv_code(src.model_code) and tv_code(c.model_code):
+        if tv_code(src.model_code) != tv_code(c.model_code):
+            return "model code"
+    else:
+        sm, cm = model_base(src.model_code), model_base(c.model_code)
+        if _both(sm, cm) and sm != cm:
+            return "model code"
     if cat == Category.PHONE:
         if _both(src.ram_gb, c.ram_gb) and src.ram_gb != c.ram_gb:
             return f"ram {_fmt(c.ram_gb)}≠{_fmt(src.ram_gb)}"

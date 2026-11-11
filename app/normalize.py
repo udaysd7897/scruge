@@ -162,6 +162,22 @@ def model_base(code: str | None) -> str | None:
     return m.group(0) if m else (code or None)
 
 
+_TV_CODE = re.compile(r"^(?:[A-Z]{1,5})?(\d{2,3})([A-Z][A-Z0-9]*)$")
+
+
+def tv_code(code: str | None) -> tuple[int, str] | None:
+    """(screen size, normalised code) for a TV model code — 55NU870BPLA, K-55XR70, OLED55C6XLA,
+    55UR75006LC.ATR — or None. Store punctuation (hyphens, spaces) and dotted suffixes are dropped."""
+    raw = (code or "").strip()
+    if not raw or re.search(r"\s", raw):
+        return None  # model codes are one token; "NU87 Nano" is a series name
+    c = raw.upper().split(".")[0].split("/")[0].replace("-", "")
+    m = _TV_CODE.match(c)
+    if not m or not (19 <= int(m.group(1)) <= 120):
+        return None
+    return int(m.group(1)), c
+
+
 def split_style_code(code: str | None) -> tuple[str | None, str | None]:
     code = _clean(code)
     if code is None:
