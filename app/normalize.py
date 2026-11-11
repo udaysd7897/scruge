@@ -103,11 +103,14 @@ def parse_gb(s: str | None) -> int | None:
     if not s:
         return None
     m = re.search(_SIZE_RE, s, re.I)
-    return _gb(m.group(1), m.group(2)) if m else None
+    gb = _gb(m.group(1), m.group(2)) if m else None
+    return gb if gb else None  # "0.1 GB" placeholder RAM (Amazon iPhones) is unknown, not zero
 
 
 def parse_ram_storage(s: str) -> tuple[int | None, int | None]:
     s = re.sub(r"\d+(?:\.\d+)?\s*(?:gb|tb)?\s*(?:virtual|extended)\s*ram", " ", s or "", flags=re.I)
+    # "User Available 479.2 GB" is free space after the OS, not the marketed capacity
+    s = re.sub(r"(?:user\s+)?available[a-z\s]*?\d+(?:\.\d+)?\s*(?:gb|tb)", " ", s, flags=re.I)
     ram = storage = None
     m = re.search(_SIZE_RE + r"\s*ram\b", s, re.I)
     if m:
