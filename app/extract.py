@@ -7,7 +7,7 @@ from html import unescape
 
 from app.models import Candidate, Canonical, Category, Platform, SourceProduct
 from app.normalize import (
-    base_colour, clean_ean, norm_brand, norm_family, parse_gb, parse_ram_storage, screen_inches,
+    base_colour, clean_ean, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage, screen_inches,
 )
 
 REQUIRED: dict[Category, list[str]] = {
@@ -31,8 +31,15 @@ _TITLE_RULES: list[tuple[Category, re.Pattern]] = [
 ]
 
 
+_ACCESSORY_CRUMB = re.compile(
+    r"\b(?:cases?|covers?|accessor\w*|protectors?|chargers?|cables?|mounts?|stands?)\b", re.I)
+
+
 def detect_category(breadcrumbs: str | None, title: str) -> Category:
     if breadcrumbs:
+        leaf = re.split(r"\s*>\s*", breadcrumbs.strip())[-1]
+        if _ACCESSORY_CRUMB.search(leaf):
+            return Category.UNSUPPORTED
         for cat, rx in _CRUMB_RULES:
             if rx.search(breadcrumbs):
                 return cat
@@ -88,7 +95,9 @@ def from_amazon(item: dict) -> SourceProduct:
         colour = m.group(1).strip() if m else None
     canon = Canonical(
         brand=brand,
-        family=_title_family(title, item.get("brand") or at.get("Brand Name")),
+        family=(model_line(title.split("(")[0], item.get("brand") or at.get("Brand Name"))
+                if cat in (Category.SNEAKER, Category.APPAREL)
+                else _title_family(title, item.get("brand") or at.get("Brand Name"))),
         ram_gb=ram if cat == Category.PHONE else None,
         storage_gb=storage if cat == Category.PHONE else None,
         screen_in=screen_inches(title) if cat == Category.TV else None,
@@ -143,7 +152,7 @@ def _ld_products(html: str) -> list[dict]:
         except ValueError:
             continue
         for d in data if isinstance(data, list) else [data]:
-            if isinstance(d, dict) and d.get("@type") == "Product" or (isinstance(d, dict) and "offers" in d):
+            if isinstance(d, dict) and (d.get("@type") == "Product" or "offers" in d):
                 out.append(d)
     return out
 
@@ -169,8 +178,11 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     ram, storage = parse_gb(spec.get("RAM")), parse_gb(spec.get("Internal Storage"))
     if ram is None and storage is None:
         ram, storage = parse_ram_storage(p.get("name") or "")
+    fk_cat = detect_category(None, p.get("name") or "")
+    fam = (model_line(spec.get("Model Name") or p.get("name") or "", brand)
+           if fk_cat in (Category.SNEAKER, Category.APPAREL) else norm_family(spec.get("Model Name")))
     canon = Canonical(
-        brand=norm_brand(brand), family=norm_family(spec.get("Model Name")),
+        brand=norm_brand(brand), family=fam,
         model_code=spec.get("Model Number"), ram_gb=ram, storage_gb=storage,
         screen_in=screen_inches(spec.get("Display Size")),
         colour=colour, base_colour=base_colour(colour), title=p.get("name") or "",
@@ -197,10 +209,10 @@ def from_myntra_search(html: str) -> list[Candidate]:
         brand = p.get("brand") or ""
         name = p.get("productName") or ""
         art = ((p.get("articleType") or {}).get("typeName") or "").lower()
-        fam = re.sub(re.escape(brand), " ", name, count=1, flags=re.I) if brand else name
+        fam = model_line(name, brand)
         colour = p.get("primaryColour")
         canon = Canonical(
-            brand=norm_brand(brand), family=norm_family(fam),
+            brand=norm_brand(brand), family=fam,
             colour=colour, base_colour=base_colour(colour),
             product_type=None if "shoe" in art or "sneaker" in art else _MYNTRA_TYPES.get(art),
             title=name,

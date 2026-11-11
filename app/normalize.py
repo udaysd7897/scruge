@@ -218,3 +218,23 @@ def distinctive_words(title: str, brand: str | None) -> set[str]:
         if b:
             drop.update(re.findall(r"[a-z0-9]+", b.lower()))
     return {w for w in re.findall(r"[a-z0-9]+", t) if w not in drop and not re.fullmatch(r"(19|20)\d{2}", w)}
+
+
+DESCRIPTOR_WORDS = {"running", "road", "sports", "sport", "casual", "training", "walking", "lifestyle",
+                    "textile", "mesh", "lace", "up", "slip", "on", "lace-up", "slip-on", "shoes", "sneakers",
+                    "tshirts", "tshirt", "shirts", "polos", "jerseys", "tees"}
+
+
+def model_line(title: str, brand: str | None) -> str | None:
+    """Model line only: strips brand, gender, product-type, descriptors, colours, pack/size tokens."""
+    t = (title or "").lower().replace("\u2019", "'")
+    t = re.sub(r"'s\b", "", t).replace("t-shirt", "tshirt")
+    t = re.sub(r"pack of \d+|\d+\s*-?\s*pack|\bpack\b", " ", t)
+    t = re.sub(r"\d+(?:\.\d+)?[\s-]*(?:gb|tb|inch|inches|cm|mm|ml|kg)\b|\buk\s*\d+\b", " ", t)
+    drop = (set(GENDER_WORDS) | PRODUCT_TYPE_WORDS | SIZE_WORDS | FILLER_WORDS | DESCRIPTOR_WORDS
+            | set(COLOUR_SYNONYMS))
+    for b in (brand, norm_brand(brand)):
+        if b:
+            drop.update(re.findall(r"[a-z0-9]+", b.lower()))
+    toks = [w for w in re.findall(r"[a-z0-9]+", t) if w not in drop]
+    return " ".join(toks) or None

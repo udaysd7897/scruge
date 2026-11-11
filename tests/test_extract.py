@@ -52,3 +52,21 @@ def test_category_and_missing():
     assert missing_required(Canonical(brand="samsung", family="galaxy s26 ultra", ram_gb=12, colour="Black"),
                             Category.PHONE) == ["storage_gb"]
     assert missing_required(Canonical(brand="sony", model_code="K-55XR70", screen_in=55), Category.TV) == []
+
+
+def test_model_line():
+    from app.normalize import model_line
+    assert model_line("Nike Downshifter 14 Women's Road Running Shoe", "nike") == "downshifter 14"
+    assert model_line("Nike Air Max 270 Men's Shoes White/Black", "nike") == "air max 270"
+
+
+def test_myntra_family_clean():
+    assert from_myntra_search(read("my_search.html"))[0].canon.family == "downshifter 14"
+
+
+def test_accessory_breadcrumbs():
+    assert detect_category("Electronics > Mobiles & Accessories > Mobile Accessories > Mobile Phone Cases",
+                          "Spigen case for Galaxy S26") == Category.UNSUPPORTED
+    assert detect_category("Electronics > TV & Home Theater Accessories > Wall Mounts", "TV wall mount") == Category.UNSUPPORTED
+    assert detect_category("Electronics > Mobiles & Accessories > Smartphones & Basic Mobiles > Smartphones",
+                          "x") == Category.PHONE
