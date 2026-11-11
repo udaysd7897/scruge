@@ -27,13 +27,6 @@ _CRUMB_RULES: list[tuple[Category, re.Pattern]] = [
 _TITLE_RULES: list[tuple[Category, re.Pattern]] = [
     (Category.TV, re.compile(r"\b(?:smart|led|oled|qled|google|android)?\s*tv\b|televisions?", re.I)),
     (Category.PHONE, re.compile(r"smartphones?|mobile phones?", re.I)),
-    # Amazon sometimes returns no breadcrumbs and titles rarely say "smartphone" ("Apple iPhone 17
-    # Pro 256 GB: ..."): known phone lines followed by a model number identify the category
-    (Category.PHONE, re.compile(
-        r"\b(?:iphone\s*\d{1,2}|galaxy\s+(?:[samfz]\s?\d{1,3}|z\s*(?:fold|flip)\s*\d)|pixel\s*\d{1,2}"
-        r"|oneplus\s*(?:\d{1,2}|nord)|redmi\s*(?:note\s*)?\d{1,2}|poco\s*[a-z]\d|vivo\s*[a-z]\d{1,3}"
-        r"|oppo\s*(?:reno|find|[a-z]\d)|realme\s*(?:\d{1,2}|narzo|gt)|iqoo\s*(?:\d|z|neo)"
-        r"|moto(?:rola)?\s*(?:g\d|edge|razr)|nothing\s*phone)", re.I)),
     (Category.SNEAKER, re.compile(r"\b(?:shoes?|sneakers?)\b", re.I)),
     (Category.APPAREL, re.compile(r"t-?shirts?|\bpolos?\b|\bjerseys?\b|\btshirts?\b", re.I)),
 ]
@@ -175,9 +168,52 @@ def _amazon_tv_code(at: dict[str, str], screen_in: int | None) -> str | None:
     return None
 
 
+_PHONE_NODES = {"1805560031"}  # amazon.in browse node: Smartphones
+_PHONE_OS = re.compile(r"\b(ios|android)\b", re.I)
+_TV_SPEC_KEYS = ("HDMI Ports", "Tuner Type", "VESA Mount Standard", "Display Size Class")
+
+
+def _grams(s: str | None) -> float | None:
+    m = re.search(r"(\d+(?:\.\d+)?)\s*(kg|kilograms?|g|grams?)\b", (s or "").lower())
+    if not m:
+        return None
+    return float(m.group(1)) * (1000 if m.group(2).startswith("k") else 1)
+
+
+def amazon_category(item: dict) -> Category:
+    """Category from what Amazon states, then a spec fingerprint — no model-name lists (design report
+    2026-11-12): breadcrumb → bestseller browse node → Item Type Name → specs → unsupported."""
+    title = item.get("title") or ""
+    if is_accessory(title):
+        return Category.UNSUPPORTED
+    crumbs = item.get("breadCrumbs")
+    if crumbs:
+        cat = detect_category(crumbs, title)
+        if cat != Category.UNSUPPORTED:
+            return cat
+    for b in item.get("bestsellerRanks") or []:
+        if any(f"/{n}/" in (b.get("url") or "") for n in _PHONE_NODES):
+            return Category.PHONE
+    at = _attrs(item)
+    po = {x.get("key"): str(x.get("value")) for x in item.get("productOverview") or [] if x.get("key") and x.get("value")}
+    itn = (at.get("Item Type Name") or "").lower()
+    if re.search(r"smart ?phone|mobile phone", itn):
+        return Category.PHONE
+    if re.search(r"\b(tv|television)\b", itn):
+        return Category.TV
+    os_ = po.get("Operating System") or at.get("Operating System")
+    storage = po.get("Memory Storage Capacity") or at.get("Memory Storage Capacity")
+    weight = _grams(at.get("Item Weight") or at.get("Product Dimensions"))
+    if os_ and _PHONE_OS.search(os_) and storage and (weight is None or weight < 350):
+        return Category.PHONE
+    if any(at.get(k) or po.get(k) for k in _TV_SPEC_KEYS):
+        return Category.TV
+    return detect_category(None, title)
+
+
 def from_amazon(item: dict) -> SourceProduct:
     title = item.get("title") or ""
-    cat = detect_category(item.get("breadCrumbs"), title)
+    cat = amazon_category(item)
     at = _attrs(item)
     va = {a.get("key"): a.get("value") for a in item.get("variantAttributes") or []}
     brand = norm_brand(item.get("brand") or at.get("Brand Name"))
