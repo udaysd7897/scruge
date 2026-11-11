@@ -119,6 +119,37 @@ def model_code_like(s: str | None, screen_in: int | None = None) -> str | None:
     return s
 
 
+_STYLE = re.compile(r"[A-Z0-9][A-Z0-9_-]{4,14}")
+
+
+def style_code_like(s: str | None) -> str | None:
+    """s if it looks like a brand style/article code: one token of letters/digits with optional - or _
+    and at least 4 digits (Puma 52885601 / 528856_01, Nike DV2789-100, adidas IF4405). Free text
+    ("TAD ESSENTIAL | GYM_2891") and seller SKUs carrying a size ("...-NVY- 5XL") are rejected."""
+    s = (s or "").strip()
+    if not _STYLE.fullmatch(s.upper()) or sum(ch.isdigit() for ch in s) < 4:
+        return None
+    return s
+
+
+_AMAZON_STYLE_KEYS = ("Style Number", "Item model number", "Manufacturer Part Number", "Model Number")
+
+
+def _amazon_style(at: dict[str, str]) -> str | None:
+    for k in _AMAZON_STYLE_KEYS:
+        code = style_code_like(at.get(k))
+        if code:
+            return code
+    return None
+
+
+def _amazon_model_name(at: dict[str, str]) -> str | None:
+    """Amazon's "Model Name" for fashion is the brand line name ("TAD ESSENTIAL | GYM_2891"): a search
+    hint, never identity. A code-like value is not a line name."""
+    v = re.split(r"\|", at.get("Model Name") or "")[0].strip()
+    return v.lower() if v and not style_code_like(v) else None
+
+
 def _amazon_tv_code(at: dict[str, str], screen_in: int | None) -> str | None:
     for k in ("Model Number", "Manufacturer Part Number", "Model Name", "Item model number"):
         code = model_code_like(at.get(k), screen_in)
@@ -166,6 +197,8 @@ def from_amazon(item: dict) -> SourceProduct:
         colour=colour,
         base_colour=base_colour(colour),
         product_type=product_type(title, item.get("breadCrumbs")) if cat == Category.APPAREL else None,
+        style_code=_amazon_style(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
+        model_name=_amazon_model_name(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
         title=title,
     )
     img = item.get("thumbnailImage") or (item.get("highResolutionImages") or [None])[0]
@@ -227,13 +260,30 @@ _FK_STATE_SPEC = re.compile(
     r'"label_1":\{"value":\{"text":\["((?:[^"\\]|\\.)*)"\]\}\},"label_0":\{"value":\{"text":"([^"]+)"\}\}')
 
 
+_FK_SHOWN = re.compile(r'"prependingText":"((?:[^"\\]|\\.)+)"')
+
+
+def _fk_shown_title(html: str, brand: str | None) -> str | None:
+    """The product title as displayed (brand + seller title). Only trusted when it starts with the
+    product's brand, so a recommended product's title is never picked up."""
+    m = _FK_SHOWN.search(html)
+    if not m:
+        return None
+    try:
+        t = json.loads(f'"{m.group(1)}"').strip()
+    except ValueError:
+        return None
+    return t if brand and t.lower().startswith(brand.lower()) else None
+
+
 def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     prods = _ld_products(html)
     if not prods:
         return []
     p = prods[0]
     toks = _tokens(html)
-    labels = ("Model Number", "Model Name", "RAM", "Internal Storage", "Color", "Display Size")
+    labels = ("Model Number", "Model Name", "RAM", "Internal Storage", "Color", "Display Size",
+              "Style Code", "Article Number")
     spec: dict[str, str] = {}
     for i, t in enumerate(toks[:-1]):
         if t in labels and t not in spec:
@@ -255,8 +305,15 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     if ram is None and storage is None:
         ram, storage = parse_ram_storage(p.get("name") or "")
     fk_cat = detect_category(None, p.get("name") or "")
+    title = p.get("name") or ""
+    style = None
     if fk_cat in (Category.SNEAKER, Category.APPAREL):
-        fam = model_line(spec.get("Model Name") or p.get("name") or "", brand)
+        # Flipkart's JSON-LD name for fashion is generated from attributes ("PUMA Printed Men Round Neck
+        # Black T-Shirt"); the page shows the brand's own title ("PUMA M Train All Day ESSENTIAL ...")
+        shown = _fk_shown_title(html, brand)
+        title = shown or title
+        style = style_code_like(spec.get("Style Code") or spec.get("Article Number"))
+        fam = model_line(spec.get("Model Name") or title, brand)
     elif fk_cat == Category.TV:
         fam = tv_family(spec.get("Model Name"), brand)
     else:
@@ -271,7 +328,8 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
         screen_in=screen_inches(spec.get("Display Size")),
         colour=colour, base_colour=base_colour(colour),
         product_type=product_type(p.get("name"), None) if fk_cat == Category.APPAREL else None,
-        title=p.get("name") or "",
+        style_code=style,
+        title=title,
     )
     price = offers.get("price")
     return [Candidate(Platform.FLIPKART, url, canon.title, canon, _fk_stock(offers.get("availability")),

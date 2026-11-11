@@ -48,17 +48,23 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
         if cat == Category.APPAREL and _both(src.product_type, c.product_type) \
                 and src.product_type != c.product_type:
             return "type"
-        if cat == Category.SNEAKER and src.style_code and c.style_code \
-                and _style_key(src.style_code) != _style_key(c.style_code):
+        if _both(src.style_code, c.style_code) and not same_style(src, c):
             return "style code"
         if _both(src.base_colour, c.base_colour) and src.base_colour != c.base_colour:
             return "colour"
         if cat == Category.APPAREL and max(src.pack_count, pack_count(src.title)) != max(c.pack_count, pack_count(cand.title)):
             return "pack count"
-        no_style = not (src.style_code and c.style_code)
-        if (cat == Category.APPAREL or no_style) and _distinct_veto(src, cand):
+        # an equal brand style code is identity: store titles are rewritten per store, so title words
+        # are only compared when no shared code proves the product
+        if not same_style(src, c) and (cat == Category.APPAREL or not _both(src.style_code, c.style_code)) \
+                and _distinct_veto(src, cand):
             return "distinctive words"
     return None
+
+
+def same_style(a: Canonical, b: Canonical) -> bool:
+    """Both listings carry the same brand style code (case/space/-/_ insensitive: 528856_01 = 52885601)."""
+    return _both(a.style_code, b.style_code) and _style_key(a.style_code) == _style_key(b.style_code)
 
 
 def _doubt(src: Canonical, cand: Candidate, cat: Category) -> str | None:
@@ -66,8 +72,8 @@ def _doubt(src: Canonical, cand: Candidate, cat: Category) -> str | None:
     a doubtful survivor is shown as "Possible match", never as a confident one)."""
     if cat not in (Category.SNEAKER, Category.APPAREL):
         return None
-    if cat == Category.SNEAKER and src.style_code and cand.canon.style_code:
-        return None  # style codes agreed in veto()
+    if same_style(src, cand.canon):
+        return None  # the brand style code proves the product
     a, b = distinctive_words(src.title, src.brand), distinctive_words(cand.title, cand.canon.brand)
     if not a or not b:
         return "Title too generic to confirm the model"
@@ -276,6 +282,8 @@ def _matched_on(s: Canonical, cand: Candidate, cat: Category | None) -> str:
         facts.append(f"model {c.model_code}")
     elif _both(s.ean, c.ean) and s.ean == c.ean:
         facts.append("barcode")
+    elif same_style(s, c):
+        facts.append(f"style {c.style_code}")
     elif c.family or s.family:
         facts.append((c.family or s.family).title())
     if cat == Category.PHONE and c.ram_gb and c.storage_gb:
