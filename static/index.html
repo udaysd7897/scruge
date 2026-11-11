@@ -1,0 +1,151 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Product Matcher</title>
+<style>
+:root{--bg:#f6f7f9;--fg:#1b1f24;--muted:#5b6470;--card:#fff;--line:#d9dde3;--accent:#2457d6;
+--green:#137a3a;--green-bg:#e4f5ea;--amber:#9a5b00;--amber-bg:#fff2d9;--grey:#59616c;--grey-bg:#eceef1;
+--blue:#1b56c4;--blue-bg:#e3edff;--red:#b3261e;--red-bg:#fde7e5}
+@media (prefers-color-scheme:dark){:root{--bg:#14171b;--fg:#e8eaed;--muted:#9aa3ae;--card:#1d2127;--line:#343b44;--accent:#7aa2ff;
+--green:#5fd18a;--green-bg:#17301f;--amber:#f2b45a;--amber-bg:#3a2d12;--grey:#a3abb5;--grey-bg:#2a2f36;
+--blue:#8db4ff;--blue-bg:#1a2842;--red:#ff8f87;--red-bg:#3d1b19}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+main{max-width:720px;margin:0 auto;padding:16px}
+h1{font-size:1.4rem;margin:8px 0 12px}
+form{display:flex;gap:8px;flex-wrap:wrap}
+input{flex:1 1 220px;min-width:0;padding:10px 12px;font:inherit;border:1px solid var(--line);border-radius:8px;background:var(--card);color:var(--fg)}
+button{padding:10px 18px;font:inherit;font-weight:600;border:0;border-radius:8px;background:var(--accent);color:#fff;cursor:pointer}
+@media (prefers-color-scheme:dark){button{color:#10151c}}
+button:disabled{opacity:.55;cursor:default}
+.banner{margin-top:14px;padding:10px 12px;border-radius:8px;background:var(--red-bg);color:var(--red);font-weight:600}
+.panel{margin-top:16px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px}
+.source{display:flex;gap:12px}
+.source img{width:88px;height:88px;object-fit:contain;border-radius:8px;background:#fff;flex:none}
+.source .t{font-weight:600;overflow-wrap:anywhere}
+.cat{color:var(--muted);font-size:.85rem;margin:2px 0 6px}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{background:var(--grey-bg);border-radius:999px;padding:2px 10px;font-size:.85rem}
+.missing{margin-top:6px;color:var(--amber);font-size:.9rem;font-weight:600}
+.cards{display:grid;gap:12px;margin-top:16px}
+.card{border:1px solid var(--line);border-left-width:6px;border-radius:12px;padding:12px 14px;background:var(--card)}
+.card .head{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.card .plat{font-weight:700;font-size:1.05rem}
+.badge{display:inline-flex;align-items:center;gap:6px;padding:2px 10px;border-radius:999px;font-weight:700;font-size:.9rem}
+.reason{margin:6px 0 0;color:var(--muted);font-size:.92rem;overflow-wrap:anywhere}
+.note{margin:8px 0 0;padding:8px 10px;border-radius:8px;background:var(--amber-bg);color:var(--amber);font-weight:600;font-size:.92rem}
+.card a{display:inline-block;margin-top:8px;color:var(--accent);font-weight:600}
+.s-searching{border-left-color:var(--grey)}.s-searching .badge{background:var(--grey-bg);color:var(--grey)}
+.s-instock{border-left-color:var(--green)}.s-instock .badge{background:var(--green-bg);color:var(--green)}
+.s-oos{border-left-color:var(--amber)}.s-oos .badge{background:var(--amber-bg);color:var(--amber)}
+.s-notlisted{border-left-color:var(--grey)}.s-notlisted .badge{background:var(--grey-bg);color:var(--grey)}
+.s-possible{border-left-color:var(--blue)}.s-possible .badge{background:var(--blue-bg);color:var(--blue)}
+.s-failed{border-left-color:var(--red)}.s-failed .badge{background:var(--red-bg);color:var(--red)}
+[hidden]{display:none!important}
+</style>
+</head>
+<body>
+<main>
+<h1>Product Matcher</h1>
+<form id="f">
+  <input id="url" type="url" inputmode="url" placeholder="Paste an Amazon.in product link" aria-label="Amazon.in product link" autocomplete="off">
+  <button id="go" type="submit">Check</button>
+</form>
+<div id="banner" class="banner" role="alert" hidden></div>
+<section id="source" class="panel" hidden></section>
+<section id="cards" class="cards" aria-live="polite"></section>
+</main>
+<script>
+(function(){
+"use strict";
+var form=document.getElementById("f"),input=document.getElementById("url"),btn=document.getElementById("go"),
+    banner=document.getElementById("banner"),sourceEl=document.getElementById("source"),cardsEl=document.getElementById("cards");
+var es=null,cards={};
+var PLAT={flipkart:"Flipkart",croma:"Croma",myntra:"Myntra"};
+var CAT={phone:"Smartphone",tv:"Television",sneaker:"Sneakers",apparel:"T-shirt / polo / jersey",unsupported:"Unsupported product"};
+var FIELD={ram_gb:"RAM",storage_gb:"storage",screen_in:"screen size",base_colour:"colour",colour:"colour",family:"model",product_type:"product type"};
+var STATES={
+ "In stock":{cls:"s-instock",icon:"✓",link:true},
+ "Out of stock":{cls:"s-oos",icon:"⏸",link:true},
+ "Not listed":{cls:"s-notlisted",icon:"✕",link:false},
+ "Possible match – verify":{cls:"s-possible",icon:"?",link:true},
+ "Couldn't check":{cls:"s-failed",icon:"⚠",link:false}
+};
+function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
+function title(s){return String(s).replace(/\b\w/g,function(c){return c.toUpperCase()})}
+function name(p){return PLAT[p]||title(p)}
+function showError(m){banner.textContent=m;banner.hidden=false}
+function finish(){if(es){es.close();es=null}btn.disabled=false}
+
+function renderSource(d){
+  sourceEl.textContent="";
+  var row=el("div","source");
+  if(d.image&&/^https?:\/\//i.test(d.image)){var img=el("img");img.alt="";img.src=d.image;row.appendChild(img)}
+  var body=el("div");
+  body.appendChild(el("div","t",d.title||"Product"));
+  body.appendChild(el("div","cat",CAT[d.category]||""));
+  var c=d.canon||{},chips=[];
+  if(c.brand)chips.push(title(c.brand));
+  if(c.family)chips.push(title(c.family));
+  if(d.category==="phone"&&c.ram_gb&&c.storage_gb)chips.push(c.ram_gb+"GB/"+c.storage_gb+"GB");
+  else if(d.category==="phone"&&c.storage_gb)chips.push(c.storage_gb+"GB");
+  if(d.category==="tv"&&c.screen_in)chips.push(c.screen_in+'"');
+  if(c.colour)chips.push(title(c.colour));
+  if(chips.length){var w=el("div","chips");chips.forEach(function(x){w.appendChild(el("span","chip",x))});body.appendChild(w)}
+  var miss=d.missing_required||[];
+  if(miss.length){
+    var seen=[];miss.forEach(function(f){var l=FIELD[f]||f;if(seen.indexOf(l)<0)seen.push(l)});
+    body.appendChild(el("div","missing","Couldn't read: "+seen.join(", ")));
+  }
+  row.appendChild(body);sourceEl.appendChild(row);sourceEl.hidden=false;
+}
+
+function card(p){
+  var c=cards[p];
+  if(!c){c=el("div","card");cards[p]=c;cardsEl.appendChild(c)}
+  return c;
+}
+function renderSearching(p,msg){
+  var c=card(p);c.className="card s-searching";c.textContent="";
+  var h=el("div","head");h.appendChild(el("span","plat",name(p)));
+  h.appendChild(el("span","badge","… Searching…"));c.appendChild(h);
+  if(msg)c.appendChild(el("p","reason",msg));
+}
+function renderResult(r){
+  var st=STATES[r.outcome]||STATES["Couldn't check"];
+  var c=card(r.platform);c.className="card "+st.cls;c.textContent="";
+  var h=el("div","head");h.appendChild(el("span","plat",name(r.platform)));
+  h.appendChild(el("span","badge",st.icon+" "+(STATES[r.outcome]?r.outcome:"Couldn't check")));
+  c.appendChild(h);
+  if(r.reason)c.appendChild(el("p","reason",r.reason));
+  if(r.colour_fallback_note)c.appendChild(el("p","note",r.colour_fallback_note));
+  if(st.link&&r.url&&/^https?:\/\//i.test(r.url)){
+    var a=el("a",null,"View on "+name(r.platform));a.href=r.url;a.target="_blank";a.rel="noopener";c.appendChild(a);
+  }
+}
+
+function handle(ev){
+  if(ev.type==="source")renderSource(ev.data||{});
+  else if(ev.type==="progress")renderSearching(ev.platform,ev.message);
+  else if(ev.type==="result")renderResult(ev.data||{});
+  else if(ev.type==="error"){showError(ev.message||"Something went wrong. Please try again.");finish()}
+  else if(ev.type==="done")finish();
+}
+
+form.addEventListener("submit",function(e){
+  e.preventDefault();
+  var u=input.value.trim();
+  if(!u){showError("Please paste an Amazon.in product link.");return}
+  if(es)es.close();
+  banner.hidden=true;sourceEl.hidden=true;sourceEl.textContent="";cardsEl.textContent="";cards={};
+  btn.disabled=true;
+  es=new EventSource("/api/check?url="+encodeURIComponent(u));
+  es.onmessage=function(m){var ev;try{ev=JSON.parse(m.data)}catch(x){return}handle(ev)};
+  es.onerror=function(){if(es){showError("Connection lost. Please try again.");finish()}};
+});
+})();
+</script>
+</body>
+</html>
