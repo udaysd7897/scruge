@@ -18,6 +18,3 @@ dev = ["pytest", "pytest-asyncio"]
 asyncio_mode = "auto"
 testpaths = ["tests"]
 pythonpath = ["."]
-
-[tool.setuptools]
-packages = ["app"]
