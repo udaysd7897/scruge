@@ -116,3 +116,11 @@ def test_distinctive_words_keeps_model_numbers():
 
 def test_stand_mount_not_accessory_tokens():
     assert not is_accessory("Samsung 139 cm (55 inch) Crystal 4K TV with Table Top Stand and Wall Mount")
+
+
+def test_pack_count():
+    from app.normalize import pack_count
+    assert pack_count("Puma Men Polo T-shirt Pack of 2") == 2
+    assert pack_count("Puma Polo 3-Pack") == 3
+    assert pack_count("Set of 4 tees") == 4
+    assert pack_count("Puma Polo") == 1

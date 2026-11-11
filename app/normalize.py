@@ -238,3 +238,11 @@ def model_line(title: str, brand: str | None) -> str | None:
             drop.update(re.findall(r"[a-z0-9]+", b.lower()))
     toks = [w for w in re.findall(r"[a-z0-9]+", t) if w not in drop]
     return " ".join(toks) or None
+
+
+def pack_count(title: str) -> int:
+    t = (title or "").lower()
+    m = re.search(r"\b(?:pack|set|combo)\s+of\s+(\d+)\b|\b(\d+)\s*-?\s*pack\b", t)
+    if not m:
+        return 1
+    return int(m.group(1) or m.group(2)) or 1

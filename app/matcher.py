@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 
 from app.models import Candidate, Canonical, Category
-from app.normalize import distinctive_words, is_accessory, model_base, norm_brand
+from app.normalize import distinctive_words, is_accessory, model_base, norm_brand, pack_count
 
 
 def _fmt(x) -> str:
@@ -43,7 +43,7 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
             return "style code"
         if _both(src.base_colour, c.base_colour) and src.base_colour != c.base_colour:
             return "colour"
-        if cat == Category.APPAREL and src.pack_count != c.pack_count:
+        if cat == Category.APPAREL and max(src.pack_count, pack_count(src.title)) != max(c.pack_count, pack_count(cand.title)):
             return "pack count"
         no_style = not (src.style_code and c.style_code)
         if (cat == Category.APPAREL or no_style) and _distinct_veto(src, cand):
@@ -61,7 +61,11 @@ def _distinct_veto(src: Canonical, cand: Candidate) -> bool:
     a = distinctive_words(src.title, src.brand)
     b = distinctive_words(cand.title, cand.canon.brand)
     if a or b:
-        if not a or not b or len(a & b) / len(a | b) < 0.5:
+        if not a or not b:
+            return True
+        m = min(len(a), len(b))
+        score = len(a & b) / (m if m >= 2 else len(a | b))
+        if score < 0.5:
             return True
     if src.family:
         toks = set(re.findall(r"[a-z0-9]+", (cand.title or "").lower())) | b

@@ -39,3 +39,12 @@ def test_sneaker_apparel():
     assert veto(polo, cand(brand="puma", product_type="polo", base_colour="black", title="PUMA Essentials Logo Slim Fit Polo T-Shirt", pack_count=2), APPAREL) == "pack count"
     assert veto(polo, cand(brand="puma", product_type="tee", base_colour="black"), APPAREL) == "type"
     assert veto(polo, cand(brand="puma", product_type="polo", base_colour="black", title="PUMA Essentials Logo Slim Fit Polo T-Shirt"), APPAREL) is None
+
+
+def test_fix_round_1():
+    s = Canonical(brand="nike", family="air max 270", base_colour="white",
+                  title="Nike Air Max 270 Men White Running Shoes Breathable Mesh Lightweight")
+    assert veto(s, cand(brand="nike", family="air max 270", base_colour="white", title="Nike Air Max 270 Sneakers"), SNEAKER) is None
+    polo = Canonical(brand="puma", product_type="polo", base_colour="black", title="Puma Essentials Logo Slim Fit Polo Black")
+    assert veto(polo, cand(brand="puma", product_type="polo", base_colour="black",
+                           title="PUMA Essentials Logo Slim Fit Polo T-Shirt (Pack of 2)"), APPAREL) == "pack count"
