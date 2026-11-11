@@ -34,6 +34,24 @@ def _links(html: str, q: str = "") -> list[str]:
     return ["https://www.flipkart.com" + u for u in out[:10]]
 
 
+SIBLING_FROM = 3   # expand the variant lists of the top 3 search hits
+SIBLING_MAX = 12   # at most this many extra product pages
+
+
+def sibling_links(html: str, url: str) -> list[str]:
+    """Other variants (storage/colour) of the same product: links on the page sharing its itm id."""
+    m = re.search(r"/p/(itm[a-z0-9]+)", url)
+    if not m:
+        return []
+    own = _PID.search(url)
+    out = []
+    for link in re.findall(rf"/[a-z0-9-]+/p/{m.group(1)}\?pid=[A-Z0-9]+", html.replace("&amp;", "&")):
+        u = "https://www.flipkart.com" + link
+        if (not own or own.group(1) not in link) and u not in out:
+            out.append(u)
+    return out
+
+
 async def flipkart_search(client: httpx.AsyncClient, q: str) -> tuple[FetchStatus, list[str]]:
     status, html = await _search_html(client, q)
     if status != FetchStatus.OK:
@@ -52,7 +70,15 @@ async def flipkart_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchS
         async with sem:
             return u, *(await fetch(client, u))
 
-    results = await asyncio.gather(*(one(u) for u in urls))
+    results = list(await asyncio.gather(*(one(u) for u in urls)))
+    # the exact variant is often not among the search hits: walk the top hits' variant lists
+    seen = set(urls)
+    sibs = []
+    for u, st, html in results[:SIBLING_FROM]:
+        if st == FetchStatus.OK:
+            sibs += [x for x in sibling_links(html, u) if x not in seen and not seen.add(x)]
+    if sibs:
+        results += await asyncio.gather(*(one(u) for u in sibs[:SIBLING_MAX]))
     cands: list[Candidate] = []
     failures: list[FetchStatus] = []
     for u, st, html in results:
