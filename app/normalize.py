@@ -225,6 +225,14 @@ def tv_family(title: str | None, brand: str | None) -> str | None:
     return " ".join(toks) or None
 
 
+_NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
+              "nine": 9, "ten": 10}
+_NUM = r"(\d+|" + "|".join(_NUM_WORDS) + r")"
+# "pack of 2", "set of two", "combo of 3", "3-pack", "2 pcs", "3 pieces"
+_PACK_RE = re.compile(r"\b(?:pack|set|combo)\s+of\s+" + _NUM + r"\b|\b" + _NUM
+                      + r"\s*-?\s*(?:pack|pcs|pc|pieces|piece)\b")
+_PACK_STRIP = re.compile(_PACK_RE.pattern + r"|\bpack\b")
+
 # measurements and shoe sizes: "256gb", "55 inch", "uk 8", "size 9", then "8 uk" (a second pass,
 # so "Air Max 270 UK 8" loses "UK 8", not "270 UK")
 _UNITS_AND_SIZES = re.compile(
@@ -245,7 +253,7 @@ def is_accessory(title: str) -> bool:
 
 def distinctive_words(title: str, brand: str | None) -> set[str]:
     t = (title or "").lower().replace("t-shirt", "tshirt")
-    t = re.sub(r"pack of \d+|\d+\s*-?\s*pack|\bpack\b", " ", t)
+    t = _PACK_STRIP.sub(" ", t)
     t = _strip_sizes(t)
     drop = set(GENDER_WORDS) | PRODUCT_TYPE_WORDS | SIZE_WORDS | FILLER_WORDS | set(COLOUR_SYNONYMS)
     for b in (brand, norm_brand(brand)):
@@ -264,7 +272,7 @@ def model_line(title: str, brand: str | None) -> str | None:
     """Model line only: strips brand, gender, product-type, descriptors, colours, pack/size tokens."""
     t = (title or "").lower().replace("\u2019", "'")
     t = re.sub(r"'s\b", "", t).replace("t-shirt", "tshirt")
-    t = re.sub(r"pack of \d+|\d+\s*-?\s*pack|\bpack\b", " ", t)
+    t = _PACK_STRIP.sub(" ", t)
     t = _strip_sizes(t)
     drop = (set(GENDER_WORDS) | PRODUCT_TYPE_WORDS | SIZE_WORDS | FILLER_WORDS | DESCRIPTOR_WORDS
             | set(COLOUR_SYNONYMS))
@@ -276,11 +284,11 @@ def model_line(title: str, brand: str | None) -> str | None:
 
 
 def pack_count(title: str) -> int:
-    t = (title or "").lower()
-    m = re.search(r"\b(?:pack|set|combo)\s+of\s+(\d+)\b|\b(\d+)\s*-?\s*pack\b", t)
+    m = _PACK_RE.search((title or "").lower())
     if not m:
         return 1
-    return int(m.group(1) or m.group(2)) or 1
+    n = m.group(1) or m.group(2)
+    return (int(n) if n.isdigit() else _NUM_WORDS[n]) or 1
 
 
 # brand names that contain a product-type word

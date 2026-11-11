@@ -322,3 +322,21 @@ def test_iphone_matches_flipkart_listing_without_ram():
     assert cands[0].canon.ram_gb is None
     r = _e2e(sp, FLIPKART, cands)
     assert r.outcome == Outcome.IN_STOCK and "pid=MOBI1" in r.url
+
+
+# ------------------------------------------------------------------ 6. pack count
+
+def test_pack_count_words_and_pieces():
+    from app.normalize import distinctive_words, pack_count
+    assert pack_count("Puma Men Polo T-Shirt Pack Of Two") == 2
+    assert pack_count("Jockey Men Tee 2 pcs") == 2
+    assert pack_count("Jockey Men Tee 3 Pieces") == 3
+    assert pack_count("Jockey Men Tee 1 pc") == 1
+    assert pack_count("Pack of 3 T-Shirts") == 3
+    assert pack_count("Set of Three Tees") == 3
+    assert pack_count("Combo of 2 Polos") == 2
+    assert pack_count("Puma Men Polo") == 1
+    assert pack_count("Puma Men's One8 Polo") == 1
+    # the pack words themselves are not distinctive words
+    assert distinctive_words("Puma Logo Polo Pack Of Two", "puma") == {"logo"}
+    assert distinctive_words("Puma Logo Polo 2 pcs", "puma") == {"logo"}
