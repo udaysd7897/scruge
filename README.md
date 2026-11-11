@@ -19,7 +19,8 @@ How the matching works, in plain words: [docs/ELI5.md](docs/ELI5.md).
 
 - [uv](https://docs.astral.sh/uv/) (it installs Python ≥ 3.11 and the dependencies for you)
 - `APIFY_KEY` in the environment. It's required for Amazon (the input) and Croma, which are
-  read through Apify actors.
+  read through Apify actors. Without it (and with no cached response) a check stops with
+  "APIFY_KEY is not set — see README".
 - `ANTHROPIC_API_KEY` (optional). It's used only to break ties between equally good listings.
   Without it, a tie stays "Possible match – verify".
 
@@ -110,8 +111,9 @@ colour → base colour, EAN checksum, accessory detection and distinctive words.
   `golden.json` as `pending`. Croma results for two cases were captured before a fix changed
   their search query, so in cache mode those show "Couldn't check".
 - Amazon often lacks a model number/EAN for phones, so phones are matched on family + RAM +
-  storage + colour. Apple's Amazon listings don't state RAM, so iPhones end up as
-  "Possible match – verify".
+  storage + colour. Apple's Amazon listings don't state RAM, so for brand Apple RAM is not
+  required: an iPhone is matched on family + storage + colour, and the RAM veto applies only
+  when both sides show RAM.
 - A TV whose Amazon page has no model number is never answered confidently. Its family comes
   from the title with sizes and generic words removed ("LG 139 cms (55 inches) NU87 AI Series
   Nano ..." becomes "nu87 nano"). Listings are filtered by brand, screen size and overlapping
@@ -128,4 +130,15 @@ colour → base colour, EAN checksum, accessory detection and distinctive words.
   returns only S22/S23). The vetoes drop them, so the result is "Not listed".
 - Stock is a snapshot at check time. Myntra counts a product as in stock if any size is available.
 - Apparel identity is a heuristic (brand, type, base colour, pack count and distinctive-word overlap).
-  When two listings look equally close, the answer is "Possible match – verify", never a guess.
+  The product type (polo / jersey / tee) comes from the title or the last breadcrumb ("Polo T-Shirt"
+  is a polo; brand names like "U.S. Polo Assn." are ignored). When two listings look equally close,
+  the answer is "Possible match – verify", never a guess.
+- Sneaker and apparel names are worded differently per store ("Grand Court 3.0 Sneaker" vs
+  "Grand Court 3.0 Tennis Shoes"), so their model line needn't be identical: the distinctive-word
+  veto decides, and every source model-line word must appear in the listing. A survivor that is
+  only weakly confirmed (a generic title such as "Puma Men Polo T-shirt", listing words the Amazon
+  title doesn't have such as "Graphic Printed" or "React", or a sneaker model line that differs)
+  is shown as "Possible match – verify", never as a confident match. Many Myntra/Flipkart apparel
+  titles are generic, so expect more "Possible match" than "In stock" for T-shirts.
+- None of the sneaker or apparel golden cases could be captured (Apify budget), so those rules
+  are tested only against synthetic, real-shaped listings.
