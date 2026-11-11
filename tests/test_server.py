@@ -4,6 +4,7 @@ from fastapi.testclient import TestClient
 
 from app import server
 
+FIRST = {"type": "progress", "platform": None, "message": "Reading the Amazon listing…"}
 EVENTS = [
     {"type": "progress", "platform": "croma", "message": "Searching Croma…"},
     {"type": "result", "data": {"platform": "croma", "outcome": "Not listed", "url": None, "reason": "x", "colour_fallback_note": None}},
@@ -27,7 +28,7 @@ def test_stream(monkeypatch):
     r = TestClient(server.app).get("/api/check", params={"url": "https://www.amazon.in/dp/X"})
     assert r.headers["content-type"].startswith("text/event-stream")
     assert r.headers["cache-control"] == "no-cache"
-    assert _events(r) == EVENTS
+    assert _events(r) == [FIRST] + EVENTS
 
 
 def test_blank_url():
@@ -42,7 +43,7 @@ def test_exception(monkeypatch):
         raise RuntimeError("x")
     _patch(monkeypatch, boom)
     ev = _events(TestClient(server.app).get("/api/check", params={"url": "u"}))
-    assert ev[1] == {"type": "error", "message": "Something went wrong. Please try again."}
+    assert ev[0] == FIRST and ev[1] == EVENTS[0] and ev[2] == {"type": "error", "message": "Something went wrong. Please try again."}
     assert ev[-1] == {"type": "done"}
 
 

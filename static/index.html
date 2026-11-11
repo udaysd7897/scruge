@@ -43,6 +43,9 @@ button:disabled{opacity:.55;cursor:default}
 .s-notlisted{border-left-color:var(--grey)}.s-notlisted .badge{background:var(--grey-bg);color:var(--grey)}
 .s-possible{border-left-color:var(--blue)}.s-possible .badge{background:var(--blue-bg);color:var(--blue)}
 .s-failed{border-left-color:var(--red)}.s-failed .badge{background:var(--red-bg);color:var(--red)}
+.status{margin-top:14px;display:flex;align-items:center;gap:10px;color:var(--muted)}
+.spin{width:18px;height:18px;border:3px solid var(--line);border-top-color:var(--accent);border-radius:50%;animation:sp .8s linear infinite;flex:none}
+@keyframes sp{to{transform:rotate(360deg)}}
 [hidden]{display:none!important}
 </style>
 </head>
@@ -54,6 +57,7 @@ button:disabled{opacity:.55;cursor:default}
   <button id="go" type="submit">Check</button>
 </form>
 <div id="banner" class="banner" role="alert" hidden></div>
+<div id="status" class="status" role="status" hidden><span class="spin"></span><span id="stext"></span></div>
 <section id="source" class="panel" hidden></section>
 <section id="cards" class="cards" aria-live="polite"></section>
 </main>
@@ -61,7 +65,7 @@ button:disabled{opacity:.55;cursor:default}
 (function(){
 "use strict";
 var form=document.getElementById("f"),input=document.getElementById("url"),btn=document.getElementById("go"),
-    banner=document.getElementById("banner"),sourceEl=document.getElementById("source"),cardsEl=document.getElementById("cards");
+    banner=document.getElementById("banner"),statusEl=document.getElementById("status"),stext=document.getElementById("stext"),sourceEl=document.getElementById("source"),cardsEl=document.getElementById("cards");
 var es=null,cards={};
 var PLAT={flipkart:"Flipkart",croma:"Croma",myntra:"Myntra"};
 var CAT={phone:"Smartphone",tv:"Television",sneaker:"Sneakers",apparel:"T-shirt / polo / jersey",unsupported:"Unsupported product"};
@@ -74,10 +78,11 @@ var STATES={
  "Couldn't check":{cls:"s-failed",icon:"⚠",link:false}
 };
 function el(tag,cls,text){var e=document.createElement(tag);if(cls)e.className=cls;if(text!=null)e.textContent=text;return e}
-function title(s){return String(s).replace(/\b\w/g,function(c){return c.toUpperCase()})}
+function title(s){return String(s).split(" ").map(function(w){return /.[A-Z]/.test(w)||!w?w:w.charAt(0).toUpperCase()+w.slice(1)}).join(" ")}
 function name(p){return PLAT[p]||title(p)}
 function showError(m){banner.textContent=m;banner.hidden=false}
-function finish(){if(es){es.close();es=null}btn.disabled=false}
+function setStatus(m){if(m){stext.textContent=m;statusEl.hidden=false}else statusEl.hidden=true}
+function finish(){if(es){es.close();es=null}btn.disabled=false;btn.textContent="Check";setStatus(null)}
 
 function renderSource(d){
   sourceEl.textContent="";
@@ -127,8 +132,9 @@ function renderResult(r){
 }
 
 function handle(ev){
-  if(ev.type==="source")renderSource(ev.data||{});
-  else if(ev.type==="progress")renderSearching(ev.platform,ev.message);
+  if(ev.type==="source"){renderSource(ev.data||{});setStatus("Searching other stores\u2026")}
+  else if(ev.type==="progress"){if(ev.platform==null)setStatus(ev.message);else renderSearching(ev.platform,ev.message)}
+  else if(false)renderSearching(ev.platform,ev.message);
   else if(ev.type==="result")renderResult(ev.data||{});
   else if(ev.type==="error"){showError(ev.message||"Something went wrong. Please try again.");finish()}
   else if(ev.type==="done")finish();
@@ -140,7 +146,7 @@ form.addEventListener("submit",function(e){
   if(!u){showError("Please paste an Amazon.in product link.");return}
   if(es)es.close();
   banner.hidden=true;sourceEl.hidden=true;sourceEl.textContent="";cardsEl.textContent="";cards={};
-  btn.disabled=true;
+  btn.disabled=true;btn.textContent="Checking\u2026";setStatus("Reading the Amazon listing\u2026");
   es=new EventSource("/api/check?url="+encodeURIComponent(u));
   es.onmessage=function(m){var ev;try{ev=JSON.parse(m.data)}catch(x){return}handle(ev)};
   es.onerror=function(){if(es){showError("Connection lost. Please try again.");finish()}};

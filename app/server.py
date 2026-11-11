@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -12,6 +13,7 @@ from app.pipeline import check
 INDEX = Path(__file__).resolve().parent.parent / "static" / "index.html"
 GENERIC_ERROR = "Something went wrong. Please try again."
 
+log = logging.getLogger(__name__)
 app = FastAPI()
 
 
@@ -24,10 +26,12 @@ async def _stream(url: str) -> AsyncIterator[str]:
         yield _sse({"type": "error", "message": "Please paste an Amazon.in product link."})
         yield _sse({"type": "done"})
         return
+    yield _sse({"type": "progress", "platform": None, "message": "Reading the Amazon listing…"})
     try:
         async for event in check(url.strip()):
             yield _sse(event)
-    except Exception:
+    except Exception as exc:
+        log.warning("check failed: %s", type(exc).__name__)
         yield _sse({"type": "error", "message": GENERIC_ERROR})
         yield _sse({"type": "done"})
 
