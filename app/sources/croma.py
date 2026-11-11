@@ -15,4 +15,14 @@ async def croma_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchStat
     )
     if status != FetchStatus.OK:
         return status, []
-    return FetchStatus.OK, [from_croma(i) for i in items]
+    cands: list[Candidate] = []
+    for i in items:
+        if not isinstance(i, dict):
+            continue
+        try:
+            c = from_croma(i)
+            if c.title:
+                cands.append(c)
+        except Exception:
+            continue
+    return (FetchStatus.OK, cands) if cands else (FetchStatus.ERROR, [])

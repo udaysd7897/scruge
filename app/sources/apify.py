@@ -48,6 +48,8 @@ async def run_actor(
         return FetchStatus.ERROR, []
     if not items:
         return FetchStatus.EMPTY, []
+    if not all(isinstance(i, dict) for i in items):
+        return FetchStatus.OK, items
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(json.dumps(items))

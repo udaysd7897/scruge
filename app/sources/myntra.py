@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from urllib.parse import quote_plus
 
@@ -19,7 +20,16 @@ async def myntra_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchSta
     status, html = await fetch(client, url)
     if status != FetchStatus.OK:
         return status, []
-    if "window.__myx" not in html:
+    marker = "window.__myx = "
+    i = html.find(marker)
+    if i < 0:
         return FetchStatus.ERROR, []
-    cands = from_myntra_search(html)
+    try:
+        data, _ = json.JSONDecoder().raw_decode(html[i + len(marker):])
+        prods = data["searchData"]["results"]["products"]
+        if not isinstance(prods, list):
+            raise TypeError
+        cands = from_myntra_search(html)
+    except Exception:
+        return FetchStatus.ERROR, []
     return (FetchStatus.OK, cands) if cands else (FetchStatus.EMPTY, [])

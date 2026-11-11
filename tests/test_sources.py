@@ -175,3 +175,44 @@ async def test_get_source():
     assert json.loads(calls[0].content)["categoryOrProductUrls"] == [{"url": "https://www.amazon.in/dp/B0GL8GXNTS"}]
     with pytest.raises(SourceError):
         await get_source(apify_client([], []), "https://www.amazon.in/dp/B0AAAAAAAA")
+
+
+@pytest.mark.parametrize("blob", ['{bad json', '{"searchData":{}}'])
+async def test_myntra_bad_myx_is_error(blob):
+    page = "<html><script>window.__myx = " + blob + "</script>" + "y" * 4000 + "</html>"
+    st, cs = await myntra_candidates(html_client(page), "nike shoes")
+    assert st == S.ERROR and cs == []
+
+
+async def test_myntra_zero_products_is_empty():
+    page = '<html><script>window.__myx = {"searchData":{"results":{"products":[]}}}</script>' + "y" * 4000 + "</html>"
+    st, cs = await myntra_candidates(html_client(page), "nike shoes")
+    assert st == S.EMPTY and cs == []
+
+
+async def test_croma_junk_items_error():
+    st, cs = await croma_candidates(apify_client([{"error": "x"}, "junk"], []), "samsung galaxy s24")
+    assert st == S.ERROR and cs == []
+
+
+async def test_flipkart_half_failed_is_blocked_not_empty():
+    search = read("fk_s26.html")
+    n = {"i": 0}
+
+    def h(req):
+        if "/search" in req.url.path:
+            return httpx.Response(200, text=search)
+        n["i"] += 1
+        # half blocked, half valid pages with no products
+        return httpx.Response(403, text="x") if n["i"] % 2 else httpx.Response(200, text="<html>" + "z" * 3000 + "</html>")
+
+    st, cs = await flipkart_candidates(mock(h), "samsung galaxy s26 ultra")
+    assert st == S.BLOCKED and cs == []
+
+
+async def test_run_actor_no_cache_for_non_dict_items():
+    calls = []
+    c = apify_client([{"a": 1}, "junk"], calls)
+    assert (await run_actor(c, "x~z", {"k": 1}))[1] == [{"a": 1}, "junk"]
+    await run_actor(c, "x~z", {"k": 1})
+    assert len(calls) == 2

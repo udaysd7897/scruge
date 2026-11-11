@@ -64,7 +64,7 @@ async def flipkart_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchS
         except Exception:
             failures.append(FetchStatus.ERROR)
     if not cands:
-        if failures and len(failures) == len(results):
+        if failures and len(failures) * 2 >= len(results):
             return (FetchStatus.BLOCKED if FetchStatus.BLOCKED in failures else FetchStatus.ERROR), []
         return FetchStatus.EMPTY, []
     return FetchStatus.OK, cands
