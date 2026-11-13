@@ -80,6 +80,9 @@ def _doubt(src: Canonical, cand: Candidate, cat: Category) -> str | None:
         return None
     if same_style(src, cand.canon):
         return None  # the brand style code proves the product
+    if cat == Category.APPAREL:
+        # store titles are rewritten per store; MRP + manufacturer + photo (confirm.py) decide instead
+        return None if cand.confirmed else NEEDS_CONFIRM
     a, b = distinctive_words(_src_text(src), src.brand), distinctive_words(cand.title, cand.canon.brand)
     if not a or not b:
         return "Title too generic to confirm the model"
@@ -121,15 +124,18 @@ def _distinct_veto(src: Canonical, cand: Candidate) -> bool:
         return False
     a = distinctive_words(_src_text(src), src.brand)
     b = distinctive_words(cand.title, cand.canon.brand)
-    if not a or not b:
-        # one title is too generic to compare: not a veto; decide() caps it at "Possible match"
+    if len(a) <= 1 or len(b) <= 1:
+        # one title is too generic to compare ("Levis Men Soft Pure Cotton Round Neck Tshirt" → {soft}):
+        # not a veto; decide() caps it at "Possible match" unless confirm.py proves it
         return False
     if a or b:
         m = min(len(a), len(b))
         score = len(a & b) / (m if m >= 2 else len(a | b))
         if score < 0.5:
             return True
-    if src.family and not src.official_name:
+    # Amazon's own model words ("025 premium soft") are store copy: when the source carries a brand style
+    # code, a listing without the code can't contradict it on wording — confirm.py decides instead
+    if src.family and not src.official_name and not src.style_code:
         toks = set(re.findall(r"[a-z0-9]+", (cand.title or "").lower())) | b
         if not set(src.family.split()) <= toks:
             return True
@@ -147,7 +153,7 @@ def score(src: Canonical, cand: Candidate, cat: Category) -> float:
     ident = (_both(sm, cm) and sm == cm) or (_both(src.ean, c.ean) and src.ean == c.ean)
     sk, ck = colour_key(src.colour), colour_key(c.colour)
     colour = _both(sk, ck) and sk == ck
-    title = fuzz.token_sort_ratio((src.title or "").lower(), (cand.title or "").lower()) / 100
+    title = fuzz.token_sort_ratio(_src_text(src).lower(), (cand.title or "").lower()) / 100
     req = REQUIRED.get(cat, [])
     present = (len(req) - len(missing_required(c, cat))) / len(req) if req else 1.0
     return 0.40 * ident + 0.25 * colour + 0.20 * title + 0.15 * present
@@ -241,6 +247,10 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
             top = min(group, key=lambda c: (c.in_stock is not True, c.price is None,
                                             c.price or 0, -scores[id(c)]))
     miss = _unconfirmed(s, top, cat)
+    if same_style(s, top.canon):
+        # the brand style code proves the product: a store that files it as "vest" rather than "tee"
+        # (Flipkart's Jockey 9930) doesn't need to show a product type
+        miss = [f for f in miss if f != "product_type"]
     if cat == Category.TV and not s.model_code:
         return Match(Decision.AMBIGUOUS, top, "Couldn't read model number on Amazon", fallback, pool, **base)
     if miss:

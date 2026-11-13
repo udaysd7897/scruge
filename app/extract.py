@@ -129,10 +129,16 @@ _AMAZON_STYLE_KEYS = ("Style Number", "Item model number", "Manufacturer Part Nu
 
 
 def _amazon_style(at: dict[str, str]) -> str | None:
-    for k in _AMAZON_STYLE_KEYS:
+    for k in _AMAZON_STYLE_KEYS:  # the whole value is a code ("52885601")
         code = style_code_like(at.get(k))
         if code:
             return code
+    for k in _AMAZON_STYLE_KEYS:  # a code followed by colour/size ("9930-0105-WHITE White L")
+        first = (at.get(k) or "").split(" ")[0]
+        if not re.search(r"pack|set|combo", first, re.I):
+            code = style_code_like(first)
+            if code:
+                return code
     return None
 
 
@@ -253,7 +259,8 @@ def from_amazon(item: dict) -> SourceProduct:
         style_code=_amazon_style(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
         model_name=_amazon_model_name(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
         gender=_gender(at.get("Department")) if cat in (Category.SNEAKER, Category.APPAREL) else None,
-        mrp=int((item.get("listPrice") or {}).get("value") or 0) or None,
+        # no strike-through list price means the product isn't discounted: the price is the MRP
+        mrp=int((item.get("listPrice") or {}).get("value") or (item.get("price") or {}).get("value") or 0) or None,
         maker=norm_maker(at.get("Manufacturer Contact Information") or at.get("Manufacturer")),
         title=title,
     )
@@ -316,6 +323,11 @@ _FK_STATE_SPEC = re.compile(
     r'"label_1":\{"value":\{"text":\["((?:[^"\\]|\\.)*)"\]\}\},"label_0":\{"value":\{"text":"([^"]+)"\}\}')
 
 
+# Flipkart's own JSON-LD category: "JOCKEY Men Vest" says nothing about clothing, its category "vest" does
+_FK_LD_CATEGORY = {"t_shirt": Category.APPAREL, "vest": Category.APPAREL, "polo": Category.APPAREL,
+                   "jersey": Category.APPAREL, "mobile": Category.PHONE, "television": Category.TV}
+
+
 _FK_SHOWN = re.compile(r'"prependingText":"((?:[^"\\]|\\.)+)"')
 
 
@@ -360,7 +372,7 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     ram, storage = parse_gb(spec.get("RAM")), parse_gb(spec.get("Internal Storage"))
     if ram is None and storage is None:
         ram, storage = parse_ram_storage(p.get("name") or "")
-    fk_cat = detect_category(None, p.get("name") or "")
+    fk_cat = _FK_LD_CATEGORY.get(str(p.get("category") or "").lower()) or detect_category(None, p.get("name") or "")
     title = p.get("name") or ""
     style = None
     if fk_cat in (Category.SNEAKER, Category.APPAREL):

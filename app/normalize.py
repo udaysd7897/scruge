@@ -76,7 +76,8 @@ def norm_brand(s: str | None) -> str | None:
     s = _clean(s)
     if s is None:
         return None
-    s = s.lower()
+    s = re.sub(r"[’'.]", "", s.lower())  # "Levi's" / "LEVI'S" / "Levis" are one brand
+    s = " ".join(s.split())
     return BRAND_ALIASES.get(s, s)
 
 
@@ -200,6 +201,7 @@ def base_colour(s: str | None) -> str | None:
     s = _clean(s)
     if s is None:
         return None
+    s = re.sub(r"\(.*?\)", " ", s)  # "White(Light Grey Mel)": the bracket describes a trim, not the colour
     for segment in re.split(r"[/\-,&]+", s.lower()):
         segment = " ".join(re.findall(r"[a-z]+", segment))
         for phrase, base in COLOUR_PHRASES.items():

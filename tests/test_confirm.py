@@ -97,4 +97,5 @@ def test_name_only_listings_go_to_confirmation_before_doubtful_ones():
     logo = myntra(title="Puma Train All Day Brand Logo T-shirt", url=MY_URL.replace("35720668", "39654569"))
     m = decide(s, [logo, exact])
     assert m.decision == Decision.AMBIGUOUS and m.reason.startswith("No style code")
-    assert [c.url for c in m.survivors] == [MY_URL]
+    # every surviving apparel listing goes to confirmation; the exact name ranks first
+    assert m.candidate.url == MY_URL and {c.url for c in m.survivors} == {MY_URL, logo.url}
