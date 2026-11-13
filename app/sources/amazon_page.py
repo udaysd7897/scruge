@@ -31,6 +31,20 @@ def _money(s: str | None) -> int | None:
     return int(m.group(1).replace(",", "")) if m else None
 
 
+_DIM_KEYS = {"color_name": "Colour", "size_name": "Size", "style_name": "Style", "configuration": "Configuration"}
+
+
+def _variants(h: str) -> list[dict]:
+    """The selected options in the variant picker (iPhone colour lives only here: "Colour: Cosmic Orange").
+    New layout: inline-twister-expanded-dimension-text-<dim>; classic: id="variation_<dim>" ... "selection"."""
+    out: dict[str, str] = {}
+    for dim, val in re.findall(r'inline-twister-expanded-dimension-text-(\w+)"[^>]*>([^<]+)<', h):
+        out.setdefault(_DIM_KEYS.get(dim, dim), _text(val))
+    for dim, val in re.findall(r'id="variation_(\w+)"[\s\S]{0,600}?class="selection"[^>]*>([^<]+)<', h):
+        out.setdefault(_DIM_KEYS.get(dim, dim), _text(val))
+    return [{"key": k, "value": v} for k, v in out.items() if v]
+
+
 def parse_amazon_page(h: str, url: str) -> dict:
     asin = re.search(r"/dp/([A-Z0-9]{10})", url)
     title = re.search(r'id="productTitle"[^>]*>(.*?)</span>', h, re.S)
@@ -64,7 +78,7 @@ def parse_amazon_page(h: str, url: str) -> dict:
         "highResolutionImages": imgs[:3],
         "thumbnailImage": imgs[0] if imgs else None,
         "inStock": bool(avail and re.search(r"in stock|only \d+ left", _text(avail.group(0)), re.I)),
-        "variantAttributes": [],
+        "variantAttributes": _variants(h),
         "bestsellerRanks": [{"url": u} for u in re.findall(r'href="(/gp/bestsellers/[^"]+)"', h)],
         "source": "page",
     }

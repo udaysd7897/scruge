@@ -30,6 +30,13 @@ def _distinct_in_order(title: str, brand: str | None, n: int = 3) -> list[str]:
     return out
 
 
+def _storage_words(gb: int | None) -> str | None:
+    """How stores write storage: "256gb", but "1 tb" / "2 tb" (Flipkart finds nothing for "1024gb")."""
+    if gb is None:
+        return None
+    return f"{gb // 1024} tb" if gb >= 1024 and gb % 1024 == 0 else f"{gb}gb"
+
+
 def ladder(src: SourceProduct, platform: Platform) -> list[str]:
     """§6.3 query ladder: model code → brand+family+key attrs → brand+family. Deduped, order kept."""
     c, cat = src.canon, src.category
@@ -38,7 +45,7 @@ def ladder(src: SourceProduct, platform: Platform) -> list[str]:
         rungs.append(c.model_code)
     if cat == Category.PHONE:
         ram = f"{c.ram_gb}gb" if c.ram_gb is not None else None
-        storage = f"{c.storage_gb}gb" if c.storage_gb is not None else None
+        storage = _storage_words(c.storage_gb)
         # build from the parts we have (iPhone listings carry no RAM): brand + family are the minimum
         rungs.append(_join(c.brand, c.family) and " ".join(
             p for p in (_join(c.brand, c.family), ram, storage, (c.colour or "").lower()) if p))
