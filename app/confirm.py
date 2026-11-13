@@ -89,7 +89,7 @@ async def confirm(client: httpx.AsyncClient, src: SourceProduct, m: Match, picke
                       key=lambda c: len(diffs[id(c)]))[:CLOSEST_MAX]
         return Match(Decision.NONE, None, "photo", survivors=[], src=m.src, category=m.category,
                      checked=len(shuffled), none_had="the same design in its photo",
-                     closest=[(c, diffs[id(c)]) for c in near])
+                     closest=([(c, diffs[id(c)]) for c in near] + m.closest)[:CLOSEST_MAX])  # + fabric-different
     if verdict != "match":
         return m
     cand = shuffled[k]

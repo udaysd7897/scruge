@@ -135,7 +135,7 @@ function renderResult(r){
   var near=(r.closest||[]).filter(function(x){return x&&/^https?:\/\//i.test(x.url||"")});
   if(near.length){
     var box=el("div","closest");
-    box.appendChild(el("p",null,"Closest options (same brand, gender, colour and cut; the design differs):"));
+    box.appendChild(el("p",null,"Closest options (same brand, gender, colour and cut; not the exact product):"));
     var ul=el("ul");
     near.forEach(function(x){
       var li=el("li"),a=el("a",null,x.title||x.url);a.href=x.url;a.target="_blank";a.rel="noopener";

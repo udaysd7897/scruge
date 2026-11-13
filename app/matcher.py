@@ -69,10 +69,6 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
             return "colour"
         if cat == Category.APPAREL and max(src.pack_count, pack_count(src.title)) != max(c.pack_count, pack_count(cand.title)):
             return "pack count"
-        if cat == Category.APPAREL:
-            fa, fb = fabric_set(src.title, src.brand), fabric_set(cand.title, c.brand)
-            if fa and fb and not fa & fb:
-                return "fabric"  # polyester microfiber vs pure cotton: a different product
         # an equal brand style code is identity: store titles are rewritten per store, so title words
         # are only compared when no shared code proves the product
         # unequal codes only stand in for the title check when the brand's codes are trusted (Nike, Puma):
@@ -256,7 +252,35 @@ def _stock_rank(c: Candidate) -> int:
     return {True: 0, None: 1, False: 2}[c.in_stock]
 
 
+def fabric_clash(src: Canonical, cand: Candidate, cat: Category) -> bool:
+    """Both titles name a fabric and they don't overlap (polyester microfiber vs pure cotton): not the exact
+    product. Soft: such a listing is never a match, but it is shown as a closest option."""
+    if cat != Category.APPAREL:
+        return False
+    fa, fb = fabric_set(src.title, src.brand), fabric_set(cand.title, cand.canon.brand)
+    return bool(fa and fb and not fa & fb)
+
+
+CLOSEST_MAX = 3
+
+
 def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
+    """_decide on the listings that can be the product; listings that pass every hard check but differ in
+    fabric are set aside as closest options (user 2026-11-13: show them, don't hide them)."""
+    s, cat = src.canon, src.category
+    off = [c for c in cands if veto(s, c, cat) is None and fabric_clash(s, c, cat)]
+    if not off:
+        return _decide(src, cands)
+    m = _decide(src, [c for c in cands if not any(c is o for o in off)])
+    m.checked = len(cands)
+    m.closest = [(c, ["fabric"]) for c in sorted(off, key=lambda c: -score(s, c, cat))[:CLOSEST_MAX]]
+    if m.decision == Decision.NONE and m.reason == "no survivors":
+        vetoes = [r for c in cands if (r := veto(s, c, cat))] + ["fabric"] * len(off)
+        m.none_had = _none_had(s, cat, vetoes)
+    return m
+
+
+def _decide(src: SourceProduct, cands: list[Candidate]) -> Match:
     s, cat = src.canon, src.category
     base = dict(src=s, category=cat, src_missing=list(src.missing_required), checked=len(cands))
     vetoes, survivors = [], []
