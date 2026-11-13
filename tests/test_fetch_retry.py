@@ -56,3 +56,25 @@ async def test_myntra_short_attempts_more_retries():
     async with httpx.AsyncClient(transport=httpx.MockTransport(h), timeout=20) as c:
         st, _ = await myntra.myntra_fetch(c, "https://www.myntra.com/x")
     assert st == FetchStatus.OK and len(calls) == 4 and set(limits) == {myntra.ATTEMPT_TIMEOUT}
+
+
+async def test_myntra_gives_up_after_four_tries():
+    from app.sources import myntra
+    calls = []
+    def h(req):
+        calls.append(1)
+        raise httpx.ReadTimeout("stalled")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(h)) as c:
+        st, _ = await myntra.myntra_fetch(c, "https://www.myntra.com/x")
+    assert st == FetchStatus.ERROR and len(calls) == 4
+
+
+async def test_other_stores_keep_client_timeout_and_three_tries():
+    calls, limits = [], []
+    def h(req):
+        calls.append(1)
+        limits.append(req.extensions["timeout"]["read"])
+        raise httpx.ReadTimeout("stalled")
+    async with httpx.AsyncClient(transport=httpx.MockTransport(h), timeout=20) as c:
+        st, _ = await http.fetch(c, "https://www.flipkart.com/x")
+    assert st == FetchStatus.ERROR and len(calls) == 3 and set(limits) == {20}

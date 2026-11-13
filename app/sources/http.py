@@ -53,7 +53,7 @@ async def fetch(client: httpx.AsyncClient, url: str, timeout: float | None = Non
     for attempt in range(len(waits) + 1):
         t = time.monotonic()
         try:
-            r = await (client.get(url, timeout=timeout) if timeout else client.get(url))
+            r = await (client.get(url, timeout=timeout) if timeout is not None else client.get(url))
         except httpx.HTTPError as e:
             log.info("fetch ERROR %s (%s) %.1fs try %d", url[:160], type(e).__name__, time.monotonic() - t, attempt + 1)
             if attempt < len(waits):

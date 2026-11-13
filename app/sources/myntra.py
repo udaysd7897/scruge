@@ -16,7 +16,8 @@ def _slug(q: str) -> str:
 
 
 # Myntra answers a search in ~1 s but stalls on and off (ReadTimeout, 2026-11-13): short attempts and
-# more of them beat one long wait. 4 tries x 8 s + 1+2+4 s backoff fits the 90 s platform budget.
+# more of them beat one long wait. Worst case per query: 4 tries x 8 s + 1+2+4 s ≈ 39 s; the pipeline stops
+# the query ladder after a query that fails outright, so a stalled Myntra can't eat the 90 s budget.
 ATTEMPT_TIMEOUT = 8.0
 BACKOFF = (1.0, 2.0, 4.0)
 

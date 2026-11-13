@@ -55,9 +55,13 @@ def _plain(obj) -> dict:
     return conv(asdict(obj))
 
 
-async def _walk(client, src: SourceProduct, platform: Platform) -> tuple[Match, list[FetchStatus]]:
+async def _walk(client, src: SourceProduct, platform: Platform,
+                progress: dict | None = None) -> tuple[Match, list[FetchStatus]]:
+    """Runs the query ladder. `progress` holds the latest (match, statuses) so the caller can still use
+    them if the platform budget runs out mid-ladder."""
     adapter = ADAPTERS[platform]
     statuses: list[FetchStatus] = []
+    progress = {} if progress is None else progress
     pool: list[Candidate] = []
     seen: set[str] = set()
     m = decide(src, [])
@@ -82,8 +86,15 @@ async def _walk(client, src: SourceProduct, platform: Platform) -> tuple[Match, 
                 seen.add(c.url)
                 pool.append(c)
         m = decide(src, pool)
+        progress["m"], progress["statuses"] = m, list(statuses)
         log.info("%s decision=%s reason=%r pick=%s", platform.value, m.decision.value, m.reason,
                  m.candidate.url if m.candidate else None)
+        if status == FetchStatus.ERROR and not cands and q != CODE_RUNG:
+            # the store isn't answering even after retries (Myntra stalls): later rungs would each burn
+            # the same retries and blow the budget, so report "Couldn't check" now. A block may be per
+            # page, so BLOCKED doesn't stop the ladder.
+            log.info("%s not answering: stopping the ladder", platform.value)
+            break
         # a code-search hit that isn't proven stays open: the text rungs may still find the exact code
         if m.decision == Decision.MATCH or (m.decision == Decision.AMBIGUOUS and q != CODE_RUNG):
             break
@@ -91,11 +102,16 @@ async def _walk(client, src: SourceProduct, platform: Platform) -> tuple[Match, 
 
 
 async def run_platform(client, src: SourceProduct, platform: Platform) -> PlatformResult:
+    progress: dict = {}
     try:
-        m, statuses = await asyncio.wait_for(_walk(client, src, platform), TIMEOUTS[platform])
+        m, statuses = await asyncio.wait_for(_walk(client, src, platform, progress), TIMEOUTS[platform])
     except (asyncio.TimeoutError, TimeoutError):
         log.warning("%s timed out after %ss", platform.value, TIMEOUTS[platform])
-        return PlatformResult(platform, Outcome.COULDNT_CHECK, None, f"Couldn't check {_name(platform)}: timed out")
+        kept = progress.get("m")
+        if kept is None or kept.decision == Decision.NONE:
+            # not every query ran: "none found so far" is not "Not listed"
+            return PlatformResult(platform, Outcome.COULDNT_CHECK, None, f"Couldn't check {_name(platform)}: timed out")
+        m, statuses = kept, progress["statuses"]  # a candidate found before the budget ran out
     except Exception:
         log.exception("%s failed", platform.value)
         return _went_wrong(platform)
