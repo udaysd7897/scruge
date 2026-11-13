@@ -9,6 +9,7 @@ from app.models import Candidate, Canonical, Category, Platform, SourceProduct
 from app.normalize import (
     base_colour, clean_ean, is_accessory, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage,
     neck_type, product_type, screen_inches, store_kind, tv_family, agreed_audience, audience,
+    CODE_BRANDS, GENDER_WORDS,
 )
 
 REQUIRED: dict[Category, list[str]] = {
@@ -130,11 +131,14 @@ def style_code_like(s: str | None) -> str | None:
 _SHORT_CODE = re.compile(r"([A-Z]{1,4})[\s-]?(\d{3,})")
 
 
-def sneaker_code_like(s: str | None) -> str | None:
-    """A brand code, or a short model number of letters + 3 digits ("SM-734", "SM 734" → "SM-734")."""
+def sneaker_code_like(s: str | None, brand: str | None = None) -> str | None:
+    """A brand code, or a short model number of letters + 3 digits ("SM-734", "SM 734" → "SM-734"). Short
+    numbers only for brands whose codes aren't trusted: New Balance "NB 574" is a model name, not a code."""
     code = style_code_like(s)
     if code:
         return code
+    if norm_brand(brand) in CODE_BRANDS:
+        return None
     m = _SHORT_CODE.fullmatch((s or "").strip().upper())
     return f"{m.group(1)}-{m.group(2)}" if m else None
 
@@ -176,8 +180,8 @@ _GENERIC_SHOE = {"leather", "stylish", "classic", "trendy", "comfortable", "ligh
 def _sneaker_model(at: dict[str, str], brand: str | None) -> str | None:
     """Amazon "Model Name" minus brand words ("Bacca Bucci Stride Eclipse" → "stride eclipse"). A model
     number ("Sm-734") is a code, not a name."""
-    v = (at.get("Model Name") or "").strip()
-    if not v or sneaker_code_like(v):
+    v = ({k.lower(): x for k, x in at.items()}.get("model name") or "").strip()
+    if not v or sneaker_code_like(v, brand):
         return None
     drop = set(re.findall(r"[a-z0-9]+", (brand or "").lower()))
     words = [w for w in re.findall(r"[a-z0-9]+", v.lower()) if w not in drop]
@@ -290,9 +294,12 @@ def from_amazon(item: dict) -> SourceProduct:
         m = re.search(r"\(([^,)]+),", title)
         colour = m.group(1).strip() if m else None
     raw_brand = item.get("brand") or at.get("Brand Name")
-    if not raw_brand and cat in (Category.SNEAKER, Category.APPAREL) and title.split():
-        # sparse Apify record (Nike Killshot B00770CB12 has no brand): fashion titles open with the brand
-        raw_brand = title.split()[0]
+    guessed = False
+    first = re.sub(r"'s$", "", title.split()[0].lower()) if title.split() else ""
+    if not raw_brand and cat in (Category.SNEAKER, Category.APPAREL) and first and first not in GENDER_WORDS:
+        # sparse Apify record (Nike Killshot B00770CB12 has no brand): fashion titles open with the brand.
+        # Only a guess ("Red Tape" → "red"): it may fall short of a listing's brand but never contradicts it
+        raw_brand, guessed = title.split()[0], True
         brand = norm_brand(raw_brand)
     code = _amazon_tv_code(at, screen_inches(title)) if cat == Category.TV else None
     if cat in (Category.SNEAKER, Category.APPAREL):
@@ -315,7 +322,7 @@ def from_amazon(item: dict) -> SourceProduct:
         colour=colour,
         base_colour=base_colour(colour),
         product_type=product_type(title, item.get("breadCrumbs")) if cat == Category.APPAREL else None,
-        style_code=(_amazon_style(at, sneaker_code_like) if cat == Category.SNEAKER
+        style_code=(_amazon_style(at, lambda v: sneaker_code_like(v, raw_brand)) if cat == Category.SNEAKER
                     else _amazon_style(at) if cat == Category.APPAREL else None),
         model_name=(_sneaker_model(at, raw_brand) if cat == Category.SNEAKER
                     else _amazon_model_name(at) if cat == Category.APPAREL else None),
@@ -326,6 +333,7 @@ def from_amazon(item: dict) -> SourceProduct:
         mrp=int((item.get("listPrice") or {}).get("value") or (item.get("price") or {}).get("value") or 0) or None,
         maker=norm_maker(at.get("Manufacturer Contact Information") or at.get("Manufacturer")),
         title=title,
+        brand_guessed=guessed,
     )
     if cat == Category.SNEAKER:
         # the model name ("Stride Eclipse") is the shoe's identity; a title remnant like "leather" or
@@ -454,7 +462,7 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
         if fk_cat == Category.SNEAKER:
             # "Sparx SM 734 | Stylish ... For Men (White , 9)": the bracket is colour + size
             title = re.sub(r"\s*\([^()]*,\s*[\d.]+\s*\)\s*$", "", title)
-            style = sneaker_code_like(spec.get("Style Code") or spec.get("Article Number"))
+            style = sneaker_code_like(spec.get("Style Code") or spec.get("Article Number"), brand)
             fam = model_line(re.split(r"[|:]", spec.get("Model Name") or spec.get("Model name") or title)[0], brand)
         else:
             style = style_code_like(spec.get("Style Code") or spec.get("Article Number"))

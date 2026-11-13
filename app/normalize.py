@@ -390,6 +390,11 @@ def store_kind(label: str | None) -> str | None:
 
 # ---------------------------------------------------------------- sneakers (POC 2026-11-13)
 
+# brands whose style codes are the brand's own and the same on every store: a different code means a
+# different product. Other brands' "codes" are often seller SKUs (Bewakoof 1053011): equal proves, unequal
+# says nothing.
+CODE_BRANDS = {"puma", "nike", "adidas", "reebok", "skechers", "asics", "new balance", "jockey", "ausk"}
+
 SOLE_WORDS = {"gum", "sole", "outsole", "midsole"}  # "Gum Yellow" names the sole, not the upper
 
 
@@ -403,13 +408,13 @@ def colour_set(s: str | None) -> frozenset[str]:
         if not words or SOLE_WORDS & set(words):
             continue
         hit = _base_colour_words(" ".join(words))
-        if hit:
+        if hit and hit != "multi":  # "Multicolor" names no colour: unknown, never a veto
             out.add(hit)
     return frozenset(out)
 
 
 _AUDIENCE = [("kids", r"\b(kids?|boys?|girls?|gs|ps|td|older|junior|infants?|toddlers?)\b"),
-             ("women", r"\b(women'?s?|womens|wmns|ladies|w)\b"),
+             ("women", r"\b(women'?s?|womens|wmns|ladies)\b|(?<![\w/])w(?=\s+[a-z])"),  # "NIKE W KILLSHOT", not "w/"
              ("men", r"\b(men'?s?|mens|man|gents)\b"),
              ("unisex", r"\bunisex\b")]
 

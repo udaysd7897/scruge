@@ -9,6 +9,7 @@ from dataclasses import replace
 import httpx
 
 from app.extract import myntra_pdp_maker
+from app.normalize import distinctive_words
 from app.matcher import Match, decide, score
 from app.models import Category, Decision, FetchStatus, Platform, SourceProduct
 from app.sources.http import fetch
@@ -30,6 +31,15 @@ def same_maker(a: str | None, b: str | None) -> bool:
     ta, tb = set(a.split()), set(b.split())
     short, long_ = (ta, tb) if len(ta) <= len(tb) else (tb, ta)
     return len(short & long_) / len(short) >= 0.8
+
+
+def _size_key(c):
+    """Flipkart lists each shoe size separately ("Sparx SM 734 ... (White , 9)"): same specific title,
+    colour and MRP is one shoe. A generic title ("Sneakers For Men") identifies nothing: keep it apart."""
+    title = re.sub(r"\W+", " ", (c.title or "").lower()).strip()
+    if len(distinctive_words(c.title, c.canon.brand)) < 2:
+        return c.url
+    return title, (c.canon.colour or "").lower(), c.canon.mrp
 
 
 async def _maker_ok(client, src: SourceProduct, cand) -> bool:
@@ -57,8 +67,7 @@ async def confirm(client: httpx.AsyncClient, src: SourceProduct, m: Match, picke
     # two different prints often share a generic title ("Bewakoof Men Black T-shirt")
     top, seen = [], set()
     for c in ranked:
-        key = (re.sub(r"\W+", " ", (c.title or "").lower()).strip(), (c.canon.colour or "").lower()) \
-            if src.category == Category.SNEAKER else c.url
+        key = _size_key(c) if src.category == Category.SNEAKER else c.url
         if key not in seen:
             seen.add(key)
             top.append(c)

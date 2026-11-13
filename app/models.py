@@ -61,6 +61,7 @@ class Canonical:
     pack_count: int = 1
     ean: str | None = None
     title: str = ""
+    brand_guessed: bool = False  # brand is the title's first word (sparse Amazon record): "red" of "Red Tape"
 
 
 @dataclass

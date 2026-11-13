@@ -63,9 +63,11 @@ def test_bacca_colourway_gate():
 
 def test_sparx_digit_group_codes():
     src = amz("amz_sparx_B09PVFDLSK").canon
+    # code review 2026-11-13: a number-only overlap is a search/ranking hint, not proof (SM-734 ~ SX-734);
+    # these listings survive the gates and go to the photo + MRP/maker check
     for code in ("SD0734G", "A1SD0734G-WHGY"):
-        assert same_style(src, fk("Sparx SM 734", "White", code).canon)
-    assert not same_style(src, fk("Sparx SM 482", "White", "SD0482G").canon)
+        assert not same_style(src, fk("Sparx SM 734", "White", code).canon)
+        assert veto(src, fk("Sparx SM 734 Sneakers For Men", "White", code), S) is None
     assert veto(src, fk("Sparx SM 734 Sneakers For Men", "Black", "SD0734G"), S) == "colour"
     assert veto(src, fk("Sparx SM 734 Sneakers For Women", "White", "SD0734G", gender="women"), S) == "gender"
 
