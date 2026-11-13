@@ -1,144 +1,170 @@
 # Cross-platform product matcher
 
-Paste an Amazon.in product link. For each competing platform, the app says whether that
-platform sells the **exact same product** and whether you can buy it now:
+Paste an Amazon.in product link. For each competing platform the app says whether that
+platform sells the **exact same product** and whether you can buy it now.
 
-| Category | Platforms | Must match (besides brand + model) |
+| Category | Platforms checked | Identity rests on |
 |---|---|---|
-| Smartphones | Flipkart, Croma | RAM, storage (and colour) |
-| Televisions | Flipkart, Croma | Screen size (and model number when Amazon has it) |
-| Sneakers | Flipkart, Myntra | Colour |
-| T-shirts, polos, jerseys | Flipkart, Myntra | Colour (plus type, pack count, distinctive words) |
+| Smartphones | Flipkart, Croma | brand + model line + RAM + storage (+ colour) |
+| Televisions | Flipkart, Croma | brand + screen size + model number |
+| Sneakers | Flipkart, Myntra | brand style code, else name words + colour |
+| T-shirts, polos, jerseys | Flipkart, Myntra | brand style code, else name words + colour + type + pack count |
 
-Each platform gets one of: **In stock**, **Out of stock**, **Not listed**,
-**Possible match – verify** or **Couldn't check**, with a one-line reason.
-
-How the matching works, in plain words: [docs/ELI5.md](docs/ELI5.md).
-
-## Prerequisites
-
-- [uv](https://docs.astral.sh/uv/) (it installs Python ≥ 3.11 and the dependencies for you)
-- `APIFY_KEY` in the environment. It's required for Amazon (the input) and Croma, which are
-  read through Apify actors. Without it (and with no cached response) a check stops with
-  "APIFY_KEY is not set — see README".
-- `ANTHROPIC_API_KEY` (optional). It's used only to break ties between equally good listings.
-  Without it, a tie stays "Possible match – verify".
+Plain-words explanation of the matching: [docs/ELI5.md](docs/ELI5.md).
 
 ## Run
 
-```bash
-./run.sh            # uv sync + uvicorn → http://127.0.0.1:8000
-```
-
-Results stream in per platform as they finish. Flipkart and Myntra take a few seconds;
-Croma (through Apify) takes ~10–60 s.
-
-## Tests
+Prerequisite: [uv](https://docs.astral.sh/uv/) (installs Python >= 3.11 and dependencies).
 
 ```bash
-uv run pytest -q    # offline: every platform test runs on saved responses in tests/fixtures/
+./run.sh     # uv sync + uvicorn -> http://127.0.0.1:8000
 ```
 
-## Golden set
+| Env var | Meaning |
+|---|---|
+| `APIFY_KEY` | Apify token. Used for Croma (always) and as the Amazon fallback when the plain product page can't be read. Without it (and no cached answer) the check says "APIFY_KEY is not set - see README". |
+| `ANTHROPIC_API_KEY` | Optional. Enables (a) the LLM tie-break between equally good listings and (b) the photo check that confirms Myntra apparel. Without it those cases stay "Possible match - verify". |
+| `APIFY_OFFLINE=1` | Cache-only mode: a missing Apify cache entry is an error, never a paid call. `scripts/golden.py` sets it; leave it **unset** when running the app. |
+| `LOG_LEVEL` | Python log level for the app log (default `INFO`; `DEBUG` also logs every successful fetch). |
 
-`scripts/golden.json` holds real Amazon.in links with hand-checked expected outcomes per
-platform. Each expectation has the listing id(s) it must point to and a note on the evidence.
-`scripts/golden.py` runs the real pipeline on them and prints precision and coverage.
+Results stream to the page (Server-Sent Events) per platform as each finishes.
 
-```bash
-uv run python scripts/golden.py                 # replay from cache only: no network, no spend
-uv run python scripts/golden.py --refresh-http  # re-fetch Flipkart/Myntra (free); Apify stays cached
-uv run python scripts/golden.py --live          # full live run; spends Apify credit on cache misses
-```
-
-- **precision**: correct confident answers (In stock / Out of stock) ÷ all confident answers.
-- **coverage**: correct confident answers ÷ cases where the product is really there.
-- **wrong match**: a confident answer that links a different product. It's printed loudly
-  and makes the script exit non-zero.
-
-Cache-only mode is the `APIFY_OFFLINE=1` environment variable, which `golden.py` sets by
-default. With it set, a missing Apify cache entry is treated as an error ("Couldn't check")
-and no paid Apify call is made. Leave it **unset** when running the app (`./run.sh`).
-Otherwise any Amazon link or Croma search that isn't already cached fails.
-
-The caches live in `.cache/` (gitignored). Apify responses are in `.cache/apify/`, and the
-golden-only replays of Flipkart/Myntra pages and LLM picks are in `.cache/golden/`.
-
-## Architecture
+## Architecture / flow
 
 ```
 browser (static/index.html)
-   │  GET /api/check?url=…   (Server-Sent Events: source → progress → result×N → done)
-   ▼
-app/server.py ── app/pipeline.py: check(url)
-                    │
-                    ├─ sources/amazon.py   resolve link → Apify junglee~amazon-crawler
-                    │      └─ extract.from_amazon → SourceProduct (category + canonical record)
-                    │
-                    └─ per platform, concurrently (Croma 90 s, Flipkart 45 s, Myntra 20 s budget):
-                         queries.ladder(src, platform)  model code → brand+family+attrs → brand+family
-                           └─ sources/flipkart.py  search page → ≤10 product pages (plain HTTPS)
-                              sources/croma.py     Apify sian.agency~croma-product-scraper
-                              sources/myntra.py    search page → embedded window.__myx JSON
-                                 └─ extract.from_*  → Candidate (canonical record + stock)
-                         matcher.decide   vetoes → strict colour pool → score → MATCH / AMBIGUOUS / NONE
-                         llm.llm_tiebreak (optional, ties only)
-                         matcher.to_result → PlatformResult (state, link, reason)
+   | GET /api/check?url=...   SSE: progress -> source -> result x N -> done
+   v
+app/server.py -> app/pipeline.py: check(url)
+  1. sources/amazon.py   normalise link to amazon.in/dp/<ASIN> (short links followed)
+        a. plain GET of the product page -> sources/amazon_page.py (title, breadcrumbs, spec rows,
+           MRP, image, bestseller links)
+        b. if blocked/unreadable: Apify junglee~amazon-crawler (paid, cached)
+        -> extract.from_amazon -> SourceProduct {category, canonical record}
+  2. Apparel with a style code: brandsite.official_name (Puma only) -> official product name
+  3. per platform, concurrently (Croma 90 s, Flipkart 45 s, Myntra 20 s):
+        queries.ladder(src, platform)       rung by rung, stop at first MATCH/AMBIGUOUS
+          -> flipkart.py | croma.py | myntra.py  -> extract.from_* -> Candidates
+        matcher.decide: vetoes -> colour pool -> doubts -> score -> MATCH / AMBIGUOUS / NONE
+        tie            -> llm.llm_tiebreak (optional)
+        NEEDS_CONFIRM  -> confirm.py: MRP + manufacturer + photo (vision.py), 45 s cap
+        matcher.to_result -> PlatformResult {state, link, reason}
 ```
 
-`app/normalize.py` holds the pure helpers: brand aliases, family, GB/TB and inch parsing,
-colour → base colour, EAN checksum, accessory detection and distinctive words.
-`app/sources/apify.py` caches every non-empty Apify response on disk.
+**Category** (`extract.amazon_category`) comes from what Amazon states, not from model-name lists:
+breadcrumb leaf (then its parent) -> bestseller browse node (smartphones) -> "Item Type Name" ->
+spec fingerprint (phone: Android/iOS + storage + light; TV: HDMI ports / tuner / VESA / display
+size class) -> title -> unsupported. Accessories, remotes, sandals, slippers, flip-flops and socks
+are unsupported.
 
-## Data sources
+**Query ladder** (`app/queries.py`), first rung that yields a match or close call wins:
+- phones: model code, then brand + family + RAM + storage + colour (missing parts skipped), then brand + family
+- TVs: model code, then brand + family/code + size + "inch", then brand + family
+- sneakers: model code, brand + family + colour, brand + family
+- apparel: model code (not on Myntra); brand + **official name** + colour; brand + official name; brand + **Amazon "Model Name"** + colour + "t-shirt"; brand + type + colour + up to 3 distinctive words; brand + up to 4 distinctive words
 
-| Platform | How | Notes |
+**Official name** (`app/brandsite.py`): the Puma style code is looked up on in.puma.com search to
+get the product name Myntra lists. Only Puma; other brands fall back to Amazon's title.
+
+## Matching rules
+
+A candidate must survive every veto (`matcher.veto`); the score (identity code/EAN 0.40, exact
+colour 0.25, title similarity 0.20, completeness 0.15) only ranks survivors, it never accepts one.
+Candidates within 0.15 of the best are a tie unless they are provably one product (same EAN, or same
+model code + same specs).
+
+- **Phones**: accessory, brand, family, model code, RAM and storage must agree (RAM/storage only
+  when both sides show them; iPhones need no RAM). Colour is strict: only the exact colour counts;
+  if the store has none, another colour may be shown with a note; a colourless listing next to
+  other colours is "Possible match".
+- **TVs**: brand, family (series words may overlap), screen within 1 inch, and model code compared
+  as size + normalised code (`tv_code`). Colour is ignored. Confirmed only when both sides show a
+  model number; otherwise "Possible match".
+- **Sneakers / apparel**: accessory, brand, gender (unisex is compatible), product type (polo /
+  jersey / tee), style code, base colour, pack count, distinctive words. A shared brand style code
+  (`same_style`; case/space/-/_ insensitive, so 528856_01 = 52885601) is identity: titles are then not
+  compared, because stores rewrite titles. A *different* style code is a veto. Style codes come from
+  Amazon "Style Number / Item model number / Manufacturer Part Number / Model Number" and Flipkart
+  "Style Code / Article Number"; Flipkart's displayed title is used instead of its generated JSON-LD
+  name. Myntra search data has brand, name, colour, article type, gender, MRP, size availability
+  but **no style code**.
+- **No shared code (NEEDS_CONFIRM)**: name agreement is not proof. `confirm.py` checks the top 3
+  survivors: MRP equals Amazon's, the Myntra product page names the same manufacturer, and the photo
+  check says SAME. Exactly one passing survivor becomes a match ("name, MRP, manufacturer and
+  photo"); otherwise "Possible match". Needs `ANTHROPIC_API_KEY`; Flipkart candidates cannot pass when
+  Amazon states a manufacturer. Other doubts (generic title, listing words Amazon lacks, sneaker model
+  line differs) also cap the result at "Possible match", and the LLM can't upgrade them.
+
+### Result states
+
+| State | Meaning |
+|---|---|
+| In stock / Out of stock | One surviving listing, confidently the same product, with link and a "Matched on ..." reason. Stock is a snapshot (Myntra: any size available). |
+| Not listed | Every search completed, none of the candidates survived. Reason names the most common veto. |
+| Possible match - verify | Link shown, but identity or stock is not proven (tie, missing attribute, doubt, unreadable stock, or unconfirmed). |
+| Couldn't check | Blocked, errored or timed out. A failed fetch is never turned into "Not listed"; if any Flipkart product page failed, a match among the loaded ones still wins but "no match" becomes "Couldn't check". |
+
+## Data sources and cost
+
+| Platform | How | Cost / notes |
 |---|---|---|
-| Amazon.in (input) | Apify `junglee~amazon-crawler`, product URL, `scrapeProductDetails` | Plain HTTP gets a bot challenge. Phones usually have no model number/EAN; TVs do. ≈ $0.005 per product. |
-| Flipkart | Plain HTTPS: search page, then each product page (JSON-LD + spec rows, or page-state JSON when the table isn't rendered) | Variants share the `itm` id and differ by `pid`. |
-| Croma | Apify `sian.agency~croma-product-scraper` (`detail` mode, 10 results) | Direct access is Akamai-protected, and we don't bypass it. Gives model number, EAN, RAM/storage, screen size and colour. |
-| Myntra | Plain HTTPS search page with embedded `window.__myx` JSON | Gives brand, name, primary colour, article type, and per-size availability. |
+| Amazon.in (input) | Plain HTTPS product page first; Apify `junglee~amazon-crawler` fallback | Page: free. Apify ~ $0.005 per product, cached on disk. |
+| Flipkart | Plain HTTPS: search page (top 10 links), each product page (JSON-LD + spec rows / page-state JSON), then sibling variants (same `itm` id) of the top 3 hits, up to 12 extra pages | Free. 3 pages fetched at a time. |
+| Croma | Apify `sian.agency~croma-product-scraper`, detail mode, **max 5 results** per search | ~ $0.07 per result (measured 2026-11-11), so up to ~$0.35 per search, more when the ladder walks several rungs. Cached; larger cached answers are reused. Direct access is bot-protected and is not bypassed. |
+| Myntra | Plain HTTPS search page with embedded `window.__myx` JSON; product page for manufacturer during confirmation | Free. |
+| Brand site (Puma) | Plain search page for the style code | Free. |
+| Anthropic | Tie-break (20 s cap) and photo check, model `claude-sonnet-5-5` | Only with `ANTHROPIC_API_KEY`. |
+
+Timeouts: Croma 90 s, Flipkart 45 s, Myntra 20 s per platform, confirmation 45 s.
+
+## Logging
+
+`logs/app.log` (plus stderr) records, per check: the Amazon read (page vs Apify, extracted fields),
+each query, fetch status, candidate count and veto reasons, the decision per rung, confirmation, and
+the final result per platform. Set `LOG_LEVEL=DEBUG` for every successful fetch too.
+
+## Tests and golden set
+
+```bash
+uv run pytest -q    # offline: runs on saved responses in tests/fixtures/
+```
+
+`scripts/golden.json` holds real Amazon.in links with hand-checked expected outcomes.
+`scripts/golden.py` runs the real pipeline on them and prints precision (correct confident answers
+/ all confident answers) and coverage (correct confident answers / cases where the product is
+really listed). A confident answer pointing at a different product is a "wrong match": it is
+printed loudly and exits non-zero.
+
+```bash
+uv run python scripts/golden.py                 # cache only: no network, no spend
+uv run python scripts/golden.py --refresh-http  # re-fetch Flipkart/Myntra (free); Apify stays cached
+uv run python scripts/golden.py --live          # live; spends Apify credit on cache misses
+```
+
+Caches live in `.cache/` (gitignored): `.cache/apify/` and golden replays in `.cache/golden/`.
 
 ## Known limitations
 
-- **Croma is expensive.** Measured on 2026-11-11, the Croma actor costs about **$0.07 per
-  detailed result**, so one run (up to 10 results) costs $0.18–0.71. The ~$0.05 first assumed was
-  wrong. When a phone/TV check walks 2–3 query rungs (for example a product Croma doesn't carry),
-  it costs $1.4–2.1. The free Apify tier ($5/month) covers only a handful of uncached phone/TV checks.
-  Responses are cached, so a repeated check is free.
-- **Thin golden set.** Only 4 of the 12 planned golden cases (3 phones, 1 TV) could be captured
-  within the Apify budget. The sneaker, T-shirt and other TV cases are listed in
-  `golden.json` as `pending`. Croma results for two cases were captured before a fix changed
-  their search query, so in cache mode those show "Couldn't check".
-- Amazon often lacks a model number/EAN for phones, so phones are matched on family + RAM +
-  storage + colour. Apple's Amazon listings don't state RAM, so for brand Apple RAM is not
-  required: an iPhone is matched on family + storage + colour, and the RAM veto applies only
-  when both sides show RAM.
-- A TV whose Amazon page has no model number is never answered confidently. Its family comes
-  from the title with sizes and generic words removed ("LG 139 cms (55 inches) NU87 AI Series
-  Nano ..." becomes "nu87 nano"). Listings are filtered by brand, screen size and overlapping
-  series words, and the closest one is shown as "Possible match – verify" ("Couldn't read model
-  number on Amazon"). A TV listing without a model number is likewise never confirmed. When both
-  sides have one, the model numbers must match exactly (after removing spaces), so a regional
-  suffix on one store gives "Not listed" rather than a guess.
-- Flipkart/Myntra markup can change, or they can start rate-limiting. Failures show as
-  "Couldn't check", never as "Not listed". One live Flipkart run hit the old 20 s budget and
-  came back "Couldn't check", so Flipkart now gets 45 s (a search page plus up to 10 product
-  pages, 3 at a time). If any Flipkart product page fails to load, a match among the pages that
-  did load still wins, but "no match" becomes "Couldn't check": the unread page may have been it.
-- Croma search returns nearby models when the exact one is missing (for example "S26 Plus"
-  returns only S22/S23). The vetoes drop them, so the result is "Not listed".
-- Stock is a snapshot at check time. Myntra counts a product as in stock if any size is available.
-- Apparel identity is a heuristic (brand, type, base colour, pack count and distinctive-word overlap).
-  The product type (polo / jersey / tee) comes from the title or the last breadcrumb ("Polo T-Shirt"
-  is a polo; brand names like "U.S. Polo Assn." are ignored). When two listings look equally close,
-  the answer is "Possible match – verify", never a guess.
-- Sneaker and apparel names are worded differently per store ("Grand Court 3.0 Sneaker" vs
-  "Grand Court 3.0 Tennis Shoes"), so their model line needn't be identical: the distinctive-word
-  veto decides, and every source model-line word must appear in the listing. A survivor that is
-  only weakly confirmed (a generic title such as "Puma Men Polo T-shirt", listing words the Amazon
-  title doesn't have such as "Graphic Printed" or "React", or a sneaker model line that differs)
-  is shown as "Possible match – verify", never as a confident match. Many Myntra/Flipkart apparel
-  titles are generic, so expect more "Possible match" than "In stock" for T-shirts.
-- None of the sneaker or apparel golden cases could be captured (Apify budget), so those rules
-  are tested only against synthetic, real-shaped listings.
+- **Amazon bot checks.** Amazon intermittently serves bot-check pages to plain requests. The app
+  then falls back to Apify, which needs credit. It never tries to bypass a bot check.
+- **Apify credit is exhausted as of 2026-11-13.** Croma checks, and any Amazon link whose page is
+  blocked (and not cached), fail with "Couldn't check" / "Couldn't read this Amazon product".
+- **Brand-site name lookup is Puma only.** Other apparel brands search with Amazon's generic title,
+  which finds fewer Myntra listings.
+- **Style codes that differ per store can be wrongly rejected.** Some brands use another code on
+  each store (Van Heusen 60001 vs IHQTS1LDS60001); when both sides show a code and they differ, the
+  candidate is vetoed, so the real listing may come back "Not listed".
+- **Myntra shows no style code.** Myntra apparel is confirmed only by MRP + manufacturer + photo,
+  which needs `ANTHROPIC_API_KEY`; without it (or if any check fails) the answer is "Possible match".
+  Generic titles also produce more "Possible match" than "In stock" for T-shirts.
+- **Phones/TVs without codes.** Amazon rarely gives phone model numbers/EANs, so phones are matched
+  on family + RAM + storage + colour. A TV with no model number on Amazon (or on the listing) is never
+  confirmed. Croma search returns neighbouring models when the exact one is missing; the vetoes drop
+  them, giving "Not listed".
+- **Fragile scraping.** Flipkart/Myntra markup can change or start rate-limiting (shown as
+  "Couldn't check").
+- **Terms of use.** Amazon, Flipkart and Myntra restrict automated access. Use this low-volume and
+  user-triggered only; it is not built for bulk crawling.
+- **Small golden set.** Only 4 of 12 planned cases (3 phones, 1 TV) are captured; the sneaker,
+  apparel and other TV cases are `pending`, so those rules are tested mainly on synthetic,
+  real-shaped fixtures.
