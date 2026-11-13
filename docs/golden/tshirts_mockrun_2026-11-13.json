@@ -92,7 +92,10 @@
    }
   },
   "secs": 36,
-  "truth": {}
+  "truth": {
+   "myntra": "https://www.myntra.com/tshirts/leriya+fashion/leriya-fashion-men-organic-cotton-t-shirt/38443941/buy",
+   "flipkart": "NOT LISTED (user searched)"
+  }
  },
  {
   "n": 4,
@@ -122,7 +125,10 @@
    }
   },
   "secs": 40,
-  "truth": {}
+  "truth": {
+   "flipkart": "https://www.flipkart.com/ausk-printed-men-round-neck-maroon-white-t-shirt/p/itma5227395b62a8?pid=TSHHZFA6CJKTGABG",
+   "myntra": "app's 33976198 is WRONG (different print); exact item not found by user"
+  }
  },
  {
   "n": 5,

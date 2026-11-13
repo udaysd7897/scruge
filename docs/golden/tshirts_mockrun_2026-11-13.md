@@ -14,3 +14,12 @@ Algorithm: main @ 22527a9. Amazon via Apify (new key), total spend $0.045. Truth
 | 8 | <https://www.amazon.in/Bewakoof-Batman-Outline-Printed-T-Shirt/dp/B0BRZW11Y6/ref=sr_1_1_sspa> | bewakoof / style 1053011 / Black-519159 / men / MRP 1099 | Not listed: Not listed: 36 candidates checked, none had style 1053011 | Possible match – verify: Title too generic to confirm the model <https://www.myntra.com/tshirts/bewakoof/bewakoof-men-black-pure-cotton-t-shirt/12739102/buy> | not yet verified |
 | 9 | <https://www.amazon.in/Amazon-Brand-Mandarin-Tshirts-Sleeves/dp/B07SK7RZBF/ref=sr_1_1_sspa> | amazon brand - symbol / style None / Jet Black / men / MRP 999 | Not listed: Not listed: 52 candidates checked, none had brand amazon brand - symbol | Not listed: Not listed: 95 candidates checked, none had brand amazon brand - symbol | not yet verified |
 | 10 | <https://www.amazon.in/adidas-Striped-Regular-Shirt-JE9356_LGTGRE/dp/B0DFWQQF13/ref=sr_1_2_sspa> | adidas / style JE9356 / LGTGRE / men / MRP 1499 | Possible match – verify: Couldn't read colour on Amazon <https://www.flipkart.com/adidas-unisex-adilette-aqua-slides/p/itmb007b2be37714?pid=SFFFBZQZVGGGQ8KA> | Possible match – verify: Couldn't read colour on Amazon <https://www.myntra.com/flip-flops/adidas/adidas-aquo-slip-on-m/38757095/buy> | not yet verified |
+
+## User-verified truth (added 2026-11-13)
+
+| # | Flipkart | Myntra |
+|---|---|---|
+| 1 Levi's | not yet verified | <https://www.myntra.com/lounge-tshirts/levis/levis-men-soft-pure-cotton-round-neck-half-sleeve-tshirt/12027436/buy> |
+| 2 Jockey | <https://www.flipkart.com/jockey-men-vest/p/itme8044db58189f?pid=TSHFFTREMEHZDKEU> | <https://www.myntra.com/innerwear-vests/jockey/jockey-combed-cotton-rib-round-neck-muscle-regular-fit-vest-9930/11443950/buy> |
+| 3 Leriya | Not listed | <https://www.myntra.com/tshirts/leriya+fashion/leriya-fashion-men-organic-cotton-t-shirt/38443941/buy> (exact; MRP differs ₹1,999 vs ₹999) |
+| 4 AUSK | <https://www.flipkart.com/ausk-printed-men-round-neck-maroon-white-t-shirt/p/itma5227395b62a8?pid=TSHHZFA6CJKTGABG> | app's 33976198 is a different print; exact not found |
