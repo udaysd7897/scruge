@@ -71,7 +71,17 @@ async def resolve_amazon_url(client: httpx.AsyncClient, url: str) -> str:
 
 async def get_source(client: httpx.AsyncClient, url: str) -> SourceProduct:
     dp = await resolve_amazon_url(client, url)
-    # 1. the product page itself (free); 2. Apify (paid, cached) when the page is blocked or unreadable
+    payload = {"categoryOrProductUrls": [{"url": dp}], "maxItemsPerStartUrl": 1, "scrapeProductDetails": True}
+    # 0. an Apify answer already paid for (richer than the page parser); 1. the product page (free);
+    # 2. Apify live (paid) when the page is blocked or unreadable
+    cached = apify._read_cache(ACTOR, payload)
+    if cached:
+        try:
+            sp = from_amazon(cached[0])
+            log.info("amazon source via Apify cache: %s", _summary(sp))
+            return sp
+        except Exception:
+            log.exception("amazon cached item unreadable")
     st, html = await fetch(client, dp)
     log.info("amazon page %s %s (%dB)", dp, st.value, len(html))
     if st == FetchStatus.OK:

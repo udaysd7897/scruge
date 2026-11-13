@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import re
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
 import httpx
 
@@ -75,6 +75,8 @@ async def flipkart_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchS
     seen = set(urls)
     sibs = []
     for u, st, html in results[:SIBLING_FROM]:
+        if "/p/itm" in u and "pid=TSH" in u:
+            continue  # clothing siblings are sizes of the same item: nothing to gain, many fetches
         if st == FetchStatus.OK:
             sibs += [x for x in sibling_links(html, u) if x not in seen and not seen.add(x)]
     if sibs:
@@ -94,3 +96,64 @@ async def flipkart_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchS
         # parse, so a match among those still wins but "no match" becomes "Couldn't check"
         return (FetchStatus.BLOCKED if FetchStatus.BLOCKED in failures else FetchStatus.ERROR), cands
     return (FetchStatus.OK, cands) if cands else (FetchStatus.EMPTY, [])
+
+
+CODE_PAGES = 2   # brand(+colour)-filtered result pages scanned for the style code
+CODE_OPEN = 6    # at most this many product pages opened
+_CARD_LINK = re.compile(r"/[^\"\s]+/p/itm[a-z0-9]+\?pid=[A-Z0-9]{16}")
+_CARD_IMG = re.compile(r"/image/\d+/\d+/[^\"\s]*?/([a-z0-9-]+)\.(?:jpeg|jpg|webp)")
+
+
+def _code_groups(code: str) -> list[str]:
+    return [g for g in re.findall(r"\d{4,}", code or "")]
+
+
+def code_card_links(html: str, code: str) -> list[str]:
+    """Product links of search cards whose image file name carries the style code's digit groups
+    ("m-auskb-04065-ausk-original-....jpeg" for AUSK-04065-L). Each card's image sits right after its link."""
+    groups = _code_groups(code)
+    if not groups:
+        return []
+    h = html.replace("&amp;", "&")
+    links = [(m.start(), m.group(0)) for m in _CARD_LINK.finditer(h)]
+    out: list[str] = []
+    for m in _CARD_IMG.finditer(h):
+        name = m.group(1)
+        if all(re.search(rf"(?<!\d){g}(?!\d)", name) for g in groups):
+            prev = [lk for pos, lk in links if pos < m.start()]
+            if prev:
+                u = "https://www.flipkart.com" + prev[-1].split("&")[0]
+                if u not in out:
+                    out.append(u)
+    return out
+
+
+async def flipkart_code_candidates(client: httpx.AsyncClient, brand: str | None, colour: str | None,
+                                   code: str | None) -> tuple[FetchStatus, list[Candidate]]:
+    """Find listings by brand style code. Flipkart's text search doesn't index codes and ranks small
+    brands low (AUSK on page 2); a brand(+colour)-filtered listing does, and card image names carry codes."""
+    if not (brand and code and _code_groups(code)):
+        return FetchStatus.EMPTY, []
+    base = (f"https://www.flipkart.com/search?q={quote_plus(brand + ' t-shirt')}"
+            f"&p%5B%5D={quote('facets.brand[]=' + brand.upper())}")
+    if colour:
+        base += f"&p%5B%5D={quote('facets.color[]=' + colour.title())}"
+    urls: list[str] = []
+    statuses: list[FetchStatus] = []
+    for page in range(1, CODE_PAGES + 1):
+        st, html = await fetch(client, base + f"&page={page}")
+        statuses.append(st)
+        if st == FetchStatus.OK:
+            urls += [u for u in code_card_links(html, code) if u not in urls]
+    if not urls:
+        bad = [x for x in statuses if x != FetchStatus.OK]
+        return (bad[0] if bad else FetchStatus.EMPTY), []
+    cands: list[Candidate] = []
+    for u in urls[:CODE_OPEN]:
+        st, html = await fetch(client, u)
+        if st == FetchStatus.OK:
+            try:
+                cands += from_flipkart_page(html, u)
+            except Exception:
+                continue
+    return (FetchStatus.OK, cands) if cands else (FetchStatus.ERROR, [])

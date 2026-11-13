@@ -76,3 +76,62 @@ def test_jockey_flipkart_same_style_matches_without_product_type():
     c = from_flipkart_page((FX / "fk_jockey_vest.html").read_text(encoding="utf-8", errors="ignore"), u)[0]
     m = decide(amz("B00W066XB2"), [c])
     assert m.decision == Decision.MATCH and "9930-0105-WHITE" in m.reason
+
+
+# --- cases 3 & 4 (Leriya → Myntra 38443941; AUSK → Flipkart TSHHZFA6CJKTGABG) -----------------------
+
+def test_style_core_matches_across_store_formats():
+    from app.matcher import same_style
+    c = lambda code: __import__("app.models", fromlist=["Canonical"]).Canonical(style_code=code)
+    assert same_style(c("AUSK-04065-L"), c("ASSKC-04065"))        # seller SKU with size vs store code
+    assert same_style(c("60001"), c("IHQTS1LDS60001"))            # Van Heusen
+    assert same_style(c("528856_01"), c("52885601"))               # punctuation
+    assert same_style(c("9930-0105-WHITE"), c("9930-0105-WHITE"))
+    assert not same_style(c("DV2789-100"), c("DV2789-101"))       # Nike: same model, other colourway
+    assert not same_style(c("04065"), c("04066"))
+
+
+def test_amazon_uses_high_resolution_image():
+    sp = amz("B07XFMDXY4")
+    assert "_SX342_" not in (sp.image or "") and "_SY445_" not in (sp.image or "")
+
+
+async def test_flipkart_code_search_finds_cards_by_code_in_image_name():
+    import httpx
+    from app.sources.flipkart import flipkart_code_candidates
+    search = (FX / "fk_search_ausk_maroon_p2.html").read_text(encoding="utf-8", errors="ignore")
+    page = (FX / "fk_ausk_maroon.html").read_text(encoding="utf-8", errors="ignore")
+    seen = []
+    def h(req):
+        seen.append(str(req.url))
+        return httpx.Response(200, text=search if "/search" in str(req.url) else page)
+    async with httpx.AsyncClient(transport=httpx.MockTransport(h)) as cl:
+        st, cands = await flipkart_code_candidates(cl, "ausk", "maroon", "AUSK-04065-L")
+    urls = {c.url for c in cands}
+    assert any("TSHHK46GDCBNUWC5" in u for u in urls)
+    assert "facets.brand" in seen[0]
+    assert sum("/search" not in u for u in seen) <= 6  # only cards whose image carries the code are opened
+
+
+async def test_confirm_accepts_photo_plus_mrp_or_maker():
+    import httpx
+    from app import confirm
+    from app.matcher import decide
+    from app.models import Candidate, Canonical, Decision, Platform
+    sp = amz("B07XFMDXY4")
+    pdp = (FX / "my_levis_pdp.html").read_text(encoding="utf-8", errors="ignore")
+    def cand(mrp):
+        return Candidate(Platform.MYNTRA, "https://www.myntra.com/x/12027436/buy", "Levis Men Soft Pure Cotton Tshirt",
+                         Canonical(brand="levis", product_type="tee", colour="White", base_colour="white", gender="men",
+                                   mrp=mrp, title="Levis Men Soft Pure Cotton Tshirt"), True, 500, image="https://i/x.jpg")
+    async def same(a, b):
+        return "SAME"
+    async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, text=pdp))) as cl:
+        # MRP differs between stores (Leriya ₹1,999 vs ₹999) but manufacturer + photo agree → confirmed
+        m = await confirm.confirm(cl, sp, decide(sp, [cand(999)]), vision=same)
+        assert m.decision == Decision.MATCH
+        # photo not SAME → never confirmed, whatever else agrees
+        async def unsure(a, b):
+            return "UNSURE"
+        m = await confirm.confirm(cl, sp, decide(sp, [cand(649)]), vision=unsure)
+        assert m.decision == Decision.AMBIGUOUS

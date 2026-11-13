@@ -33,14 +33,14 @@ def same_maker(a: str | None, b: str | None) -> bool:
 
 async def _passes(client, src: SourceProduct, cand, vision) -> bool:
     s, c = src.canon, cand.canon
-    if not (s.mrp and c.mrp and s.mrp == c.mrp):
-        return False
-    if s.maker:
-        if cand.platform != Platform.MYNTRA:
-            return False
+    mrp_ok = bool(s.mrp and c.mrp and s.mrp == c.mrp)
+    maker_ok = False
+    if s.maker and cand.platform == Platform.MYNTRA:
         st, html = await fetch(client, cand.url)
-        if st != FetchStatus.OK or not same_maker(s.maker, myntra_pdp_maker(html)):
-            return False
+        maker_ok = st == FetchStatus.OK and same_maker(s.maker, myntra_pdp_maker(html))
+    # sellers price differently per store (Leriya ₹1,999 vs ₹999): the photo is required, plus MRP or maker
+    if not (mrp_ok or maker_ok):
+        return False
     return await vision(src, cand) == "SAME"
 
 
@@ -48,8 +48,8 @@ async def confirm(client: httpx.AsyncClient, src: SourceProduct, m: Match, visio
     if src.category != Category.APPAREL or m.decision != Decision.AMBIGUOUS or src.missing_required:
         return m
     # equal MRP first (Levi's: ₹649 on both), then score; MRP is checked again in _passes
-    same_mrp = [c for c in m.survivors if src.canon.mrp and c.canon.mrp == src.canon.mrp]
-    top = sorted(same_mrp, key=lambda c: -score(src.canon, c, src.category))[:TOP]
+    mrp = src.canon.mrp
+    top = sorted(m.survivors, key=lambda c: (not (mrp and c.canon.mrp == mrp), -score(src.canon, c, src.category)))[:TOP]
     ok = await asyncio.gather(*(_passes(client, src, c, vision) for c in top))
     passed = [c for c, good in zip(top, ok) if good]
     if len(passed) != 1:

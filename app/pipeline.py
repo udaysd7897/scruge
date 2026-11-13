@@ -16,7 +16,7 @@ from app.models import Candidate, Category, Decision, FetchStatus, Outcome, Plat
 from app.queries import ladder
 from app.sources.amazon import SourceError, get_source
 from app.sources.croma import croma_candidates
-from app.sources.flipkart import flipkart_candidates
+from app.sources.flipkart import flipkart_candidates, flipkart_code_candidates
 from app.sources.http import make_client
 from app.sources.myntra import myntra_candidates
 
@@ -27,13 +27,14 @@ PLATFORMS: dict[Category, list[Platform]] = {
     Category.APPAREL: [Platform.FLIPKART, Platform.MYNTRA],
 }
 log = logging.getLogger(__name__)
+CODE_RUNG = "<style code search>"
 
 ADAPTERS = {
     Platform.FLIPKART: flipkart_candidates,
     Platform.CROMA: croma_candidates,
     Platform.MYNTRA: myntra_candidates,
 }
-TIMEOUTS: dict[Platform, float] = {Platform.CROMA: 90, Platform.FLIPKART: 45, Platform.MYNTRA: 20}
+TIMEOUTS: dict[Platform, float] = {Platform.CROMA: 90, Platform.FLIPKART: 90, Platform.MYNTRA: 60}
 UNSUPPORTED = "This product isn't a phone, TV, sneaker or T-shirt/polo/jersey."
 
 
@@ -60,9 +61,16 @@ async def _walk(client, src: SourceProduct, platform: Platform) -> tuple[Match, 
     pool: list[Candidate] = []
     seen: set[str] = set()
     m = decide(src, [])
-    for q in ladder(src, platform):
+    rungs: list[str] = list(ladder(src, platform))
+    c = src.canon
+    if platform == Platform.FLIPKART and src.category in (Category.APPAREL, Category.SNEAKER) and c.style_code:
+        rungs.insert(0, CODE_RUNG)  # brand-filtered search matched on the code in card images
+    for q in rungs:
         t = time.monotonic()
-        status, cands = await adapter(client, q)
+        if q == CODE_RUNG:
+            status, cands = await flipkart_code_candidates(client, c.brand, c.base_colour, c.style_code)
+        else:
+            status, cands = await adapter(client, q)
         statuses.append(status)
         reasons = Counter(veto(src.canon, c, src.category) or "PASS" for c in cands)
         log.info("%s q=%r status=%s candidates=%d %.1fs reasons=%s", platform.value, q, status.value,
@@ -74,7 +82,8 @@ async def _walk(client, src: SourceProduct, platform: Platform) -> tuple[Match, 
         m = decide(src, pool)
         log.info("%s decision=%s reason=%r pick=%s", platform.value, m.decision.value, m.reason,
                  m.candidate.url if m.candidate else None)
-        if m.decision in (Decision.MATCH, Decision.AMBIGUOUS):
+        # a code-search hit that isn't proven stays open: the text rungs may still find the exact code
+        if m.decision == Decision.MATCH or (m.decision == Decision.AMBIGUOUS and q != CODE_RUNG):
             break
     return m, statuses
 

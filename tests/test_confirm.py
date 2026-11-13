@@ -72,13 +72,24 @@ async def test_photo_different_or_unsure_stays_possible():
         assert m.decision == Decision.AMBIGUOUS
 
 
-async def test_mrp_mismatch_is_not_confirmed():
+async def test_mrp_and_maker_mismatch_is_not_confirmed():
+    # option 2 (2026-11-13): photo SAME + (MRP equal or same manufacturer). Neither agreeing → not confirmed
     s = src()
+    s.canon.maker = "some other maker plot 1 delhi 110001"
     async def same(a, b):
         return "SAME"
     async with client() as cl:
         m = await confirm.confirm(cl, s, decide(s, [myntra(mrp=2299)]), vision=same)
     assert m.decision == Decision.AMBIGUOUS
+
+
+async def test_mrp_mismatch_with_same_maker_and_photo_is_confirmed():
+    s = src()
+    async def same(a, b):
+        return "SAME"
+    async with client() as cl:
+        m = await confirm.confirm(cl, s, decide(s, [myntra(mrp=2299)]), vision=same)
+    assert m.decision == Decision.MATCH
 
 
 async def test_two_colour_siblings_both_same_is_ambiguous():

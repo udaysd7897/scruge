@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import re
 
+import asyncio
 import logging
 import time
 
@@ -39,14 +40,29 @@ def classify(status_code: int, body: str) -> FetchStatus:
     return FetchStatus.OK
 
 
+BACKOFF = (1.0, 3.0)  # seconds before retry 1 and 2; transient failures only
+_RETRY_STATUS = {429, 500, 502, 503, 504, 529}
+
+
 async def fetch(client: httpx.AsyncClient, url: str) -> tuple[FetchStatus, str]:
-    t = time.monotonic()
-    try:
-        r = await client.get(url)
-    except httpx.HTTPError as e:
-        log.info("fetch ERROR %s (%s) %.1fs", url[:160], type(e).__name__, time.monotonic() - t)
-        return FetchStatus.ERROR, ""
-    st = classify(r.status_code, r.text)
-    log.log(logging.INFO if st != FetchStatus.OK else logging.DEBUG,
-            "fetch %s http=%s %dB %.1fs %s", st.value, r.status_code, len(r.text), time.monotonic() - t, url[:160])
-    return st, r.text
+    """GET with retries + backoff for network errors and 429/5xx. A real answer (200, 404, a bot-check
+    page) returns at once: retrying a bot check right away doesn't help."""
+    for attempt in range(len(BACKOFF) + 1):
+        t = time.monotonic()
+        try:
+            r = await client.get(url)
+        except httpx.HTTPError as e:
+            log.info("fetch ERROR %s (%s) %.1fs try %d", url[:160], type(e).__name__, time.monotonic() - t, attempt + 1)
+            if attempt < len(BACKOFF):
+                await asyncio.sleep(BACKOFF[attempt])
+                continue
+            return FetchStatus.ERROR, ""
+        st = classify(r.status_code, r.text)
+        log.log(logging.INFO if st != FetchStatus.OK else logging.DEBUG,
+                "fetch %s http=%s %dB %.1fs %s try %d", st.value, r.status_code, len(r.text),
+                time.monotonic() - t, url[:160], attempt + 1)
+        if r.status_code in _RETRY_STATUS and attempt < len(BACKOFF):
+            await asyncio.sleep(BACKOFF[attempt])
+            continue
+        return st, r.text
+    return FetchStatus.ERROR, ""

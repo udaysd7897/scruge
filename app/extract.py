@@ -264,7 +264,7 @@ def from_amazon(item: dict) -> SourceProduct:
         maker=norm_maker(at.get("Manufacturer Contact Information") or at.get("Manufacturer")),
         title=title,
     )
-    img = item.get("thumbnailImage") or (item.get("highResolutionImages") or [None])[0]
+    img = (item.get("highResolutionImages") or [None])[0] or item.get("thumbnailImage")
     return SourceProduct(url=item.get("url") or "", asin=item.get("asin") or "", title=title, image=img,
                          category=cat, canon=canon, missing_required=missing_required(canon, cat))
 

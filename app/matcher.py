@@ -69,8 +69,19 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
 
 
 def same_style(a: Canonical, b: Canonical) -> bool:
-    """Both listings carry the same brand style code (case/space/-/_ insensitive: 528856_01 = 52885601)."""
-    return _both(a.style_code, b.style_code) and _style_key(a.style_code) == _style_key(b.style_code)
+    """Both listings carry the same brand style code. Equal ignoring case/space/-/_ (528856_01 = 52885601),
+    or the same digit groups when stores add their own letters/size: AUSK-04065-L = ASSKC-04065,
+    60001 = IHQTS1LDS60001. A different colourway number (DV2789-100 vs -101) is a different style."""
+    if not _both(a.style_code, b.style_code):
+        return False
+    if _style_key(a.style_code) == _style_key(b.style_code):
+        return True
+    ga, gb = _digit_groups(a.style_code), _digit_groups(b.style_code)
+    return bool(ga) and ga == gb and any(len(g) >= 4 for g in ga)
+
+
+def _digit_groups(code: str) -> frozenset[str]:
+    return frozenset(re.findall(r"\d{3,}", code))
 
 
 def _doubt(src: Canonical, cand: Candidate, cat: Category) -> str | None:
@@ -110,7 +121,7 @@ def _tv_family_overlap(a: str, b: str, title: str) -> bool:
 
 
 def _style_key(code: str) -> str:
-    return re.sub(r"[\s_]+", "", code.upper().replace("/", "-"))
+    return re.sub(r"[\s_\-/]+", "", code.upper())
 
 
 def _src_text(src: Canonical) -> str:
