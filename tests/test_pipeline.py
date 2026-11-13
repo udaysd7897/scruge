@@ -74,7 +74,7 @@ def test_ladder_tv_sneaker_apparel():
     q = ladder(ap, MYNTRA)
     assert len(q) == 3 and q[0] == "puma polo t-shirt blue" and q[1].startswith("puma polo blue ")
     assert q[1].split()[3:] == ["essentials", "logo", "regular"]
-    assert q[1] == "puma essentials logo regular fit"  # brand + up to 4 distinctive words
+    assert q[2] == "puma essentials logo regular fit"  # brand + up to 4 distinctive words
 
 
 # ------------------------------------------------------------------ llm
