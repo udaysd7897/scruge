@@ -267,7 +267,11 @@ def amazon_category(item: dict) -> Category:
     if re.search(r"\b(tv|television)\b", itn):
         return Category.TV
     os_ = po.get("Operating System") or at.get("Operating System")
-    storage = po.get("Memory Storage Capacity") or at.get("Memory Storage Capacity")
+    va = {x.get("key"): x.get("value") for x in item.get("variantAttributes") or []}
+    # the storage row is missing on some pages (17 Pro Max 256 GB B0FQFV2XKS): Apple's own "CAPACITY" row,
+    # the variant picker's Size or the title carry it too
+    storage = (po.get("Memory Storage Capacity") or at.get("Memory Storage Capacity") or at.get("CAPACITY")
+               or (parse_gb(va.get("Size")) and va.get("Size")) or (parse_gb(title) and title))
     weight = _grams(at.get("Item Weight") or at.get("Product Dimensions"))
     if os_ and _PHONE_OS.search(os_) and storage and (weight is None or weight < 350):
         return Category.PHONE

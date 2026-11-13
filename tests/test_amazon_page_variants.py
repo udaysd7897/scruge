@@ -31,3 +31,15 @@ def test_terabyte_storage_is_searched_as_tb():
     from app.queries import ladder
     item = parse_amazon_page((FX / "amz_page_iphone17pm.html").read_text(encoding="utf-8", errors="ignore"), URL)
     assert ladder(from_amazon(item), Platform.FLIPKART)[0] == "apple iphone 17 pro max 1 tb cosmic orange"
+
+
+def test_phone_without_storage_row_is_still_a_phone():
+    # user report 2026-11-13: B0FQFV2XKS (17 Pro Max 256 GB) came out "unsupported": no breadcrumb, no
+    # bestseller node and, unlike the 1 TB page, no "Memory Storage Capacity" row. The storage is in the
+    # title / variant picker ("256 GB")
+    from app.models import Category
+    item = parse_amazon_page((FX / "amz_page_iphone17pm_256.html").read_text(encoding="utf-8", errors="ignore"),
+                             "https://www.amazon.in/dp/B0FQFV2XKS")
+    sp = from_amazon(item)
+    assert sp.category == Category.PHONE
+    assert (sp.canon.storage_gb, sp.canon.colour, sp.missing_required) == (256, "Deep Blue", [])
