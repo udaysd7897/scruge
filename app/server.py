@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
+import os
 from collections.abc import AsyncIterator
 from pathlib import Path
 
@@ -13,6 +14,13 @@ from app.pipeline import check
 INDEX = Path(__file__).resolve().parent.parent / "static" / "index.html"
 GENERIC_ERROR = "Something went wrong. Please try again."
 
+LOG_FILE = Path(__file__).resolve().parent.parent / "logs" / "app.log"
+LOG_FILE.parent.mkdir(exist_ok=True)
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO").upper(),
+    format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+    handlers=[logging.StreamHandler(), logging.FileHandler(LOG_FILE)],
+)
 log = logging.getLogger(__name__)
 app = FastAPI()
 
@@ -26,12 +34,13 @@ async def _stream(url: str) -> AsyncIterator[str]:
         yield _sse({"type": "error", "message": "Please paste an Amazon.in product link."})
         yield _sse({"type": "done"})
         return
+    log.info("check start url=%s", url.strip()[:300])
     yield _sse({"type": "progress", "platform": None, "message": "Reading the Amazon listing…"})
     try:
         async for event in check(url.strip()):
             yield _sse(event)
     except Exception as exc:
-        log.warning("check failed: %s", type(exc).__name__)
+        log.exception("check failed: %s", type(exc).__name__)
         yield _sse({"type": "error", "message": GENERIC_ERROR})
         yield _sse({"type": "done"})
 

@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
+from collections import Counter
 from collections.abc import AsyncIterator
 from dataclasses import asdict
 from enum import Enum
@@ -8,7 +11,7 @@ from enum import Enum
 from app.brandsite import official_name
 from app.llm import llm_tiebreak
 from app.confirm import confirm
-from app.matcher import NEEDS_CONFIRM, Match, decide, resolve_tie, to_result
+from app.matcher import NEEDS_CONFIRM, Match, decide, resolve_tie, to_result, veto
 from app.models import Candidate, Category, Decision, FetchStatus, Outcome, Platform, PlatformResult, SourceProduct
 from app.queries import ladder
 from app.sources.amazon import SourceError, get_source
@@ -23,6 +26,8 @@ PLATFORMS: dict[Category, list[Platform]] = {
     Category.SNEAKER: [Platform.FLIPKART, Platform.MYNTRA],
     Category.APPAREL: [Platform.FLIPKART, Platform.MYNTRA],
 }
+log = logging.getLogger(__name__)
+
 ADAPTERS = {
     Platform.FLIPKART: flipkart_candidates,
     Platform.CROMA: croma_candidates,
@@ -56,13 +61,19 @@ async def _walk(client, src: SourceProduct, platform: Platform) -> tuple[Match, 
     seen: set[str] = set()
     m = decide(src, [])
     for q in ladder(src, platform):
+        t = time.monotonic()
         status, cands = await adapter(client, q)
         statuses.append(status)
+        reasons = Counter(veto(src.canon, c, src.category) or "PASS" for c in cands)
+        log.info("%s q=%r status=%s candidates=%d %.1fs reasons=%s", platform.value, q, status.value,
+                 len(cands), time.monotonic() - t, dict(reasons.most_common(6)))
         for c in cands:
             if c.url not in seen:
                 seen.add(c.url)
                 pool.append(c)
         m = decide(src, pool)
+        log.info("%s decision=%s reason=%r pick=%s", platform.value, m.decision.value, m.reason,
+                 m.candidate.url if m.candidate else None)
         if m.decision in (Decision.MATCH, Decision.AMBIGUOUS):
             break
     return m, statuses
@@ -72,8 +83,10 @@ async def run_platform(client, src: SourceProduct, platform: Platform) -> Platfo
     try:
         m, statuses = await asyncio.wait_for(_walk(client, src, platform), TIMEOUTS[platform])
     except (asyncio.TimeoutError, TimeoutError):
+        log.warning("%s timed out after %ss", platform.value, TIMEOUTS[platform])
         return PlatformResult(platform, Outcome.COULDNT_CHECK, None, f"Couldn't check {_name(platform)}: timed out")
     except Exception:
+        log.exception("%s failed", platform.value)
         return _went_wrong(platform)
     try:
         # The tie-break runs outside the platform budget: llm_tiebreak has its own 20 s cap and
@@ -87,8 +100,11 @@ async def run_platform(client, src: SourceProduct, platform: Platform) -> Platfo
                 m = await asyncio.wait_for(confirm(client, src, m), 45)
             except (asyncio.TimeoutError, TimeoutError):
                 pass
-        return to_result(platform, m, statuses, src.canon.colour)
+        r = to_result(platform, m, statuses, src.canon.colour)
+        log.info("%s RESULT %s | %s | %s", platform.value, r.outcome.value, r.reason, r.url)
+        return r
     except Exception:
+        log.exception("%s failed", platform.value)
         return _went_wrong(platform)
 
 

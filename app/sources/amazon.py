@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 import re
 from urllib.parse import urlparse
@@ -17,6 +18,16 @@ ACTOR = "junglee~amazon-crawler"
 _MSG = "Please paste an Amazon.in product link"
 _ASIN = re.compile(r"/(?:dp|gp/product)/([A-Z0-9]{10})(?:[/?]|$)", re.I)
 _SHORT_HOSTS = {"amzn.in", "www.amzn.in", "amzn.to", "www.amzn.to", "a.co", "www.a.co"}
+
+
+log = logging.getLogger(__name__)
+
+
+def _summary(sp) -> str:
+    c = sp.canon
+    keys = ("brand", "family", "model_code", "ram_gb", "storage_gb", "screen_in", "colour", "style_code", "gender", "mrp")
+    return f"asin={sp.asin} cat={sp.category.value} missing={sp.missing_required} " + \
+        " ".join(f"{k}={getattr(c, k)!r}" for k in keys if getattr(c, k) not in (None, ""))
 
 
 class SourceError(Exception):
@@ -62,13 +73,19 @@ async def get_source(client: httpx.AsyncClient, url: str) -> SourceProduct:
     dp = await resolve_amazon_url(client, url)
     # 1. the product page itself (free); 2. Apify (paid, cached) when the page is blocked or unreadable
     st, html = await fetch(client, dp)
+    log.info("amazon page %s %s (%dB)", dp, st.value, len(html))
     if st == FetchStatus.OK:
         item = parse_amazon_page(html, dp)
         if looks_like_product(item):
             try:
-                return from_amazon(item)
+                sp = from_amazon(item)
+                log.info("amazon source via page: %s", _summary(sp))
+                return sp
             except Exception:
-                pass
+                log.exception("amazon page parse failed")
+        else:
+            log.info("amazon page not readable as a product (no title/asin)")
+    log.info("amazon falling back to Apify")
     status, items = await run_actor(
         client,
         ACTOR,
@@ -77,6 +94,7 @@ async def get_source(client: httpx.AsyncClient, url: str) -> SourceProduct:
     if status != FetchStatus.OK and not os.environ.get("APIFY_KEY") and not apify.OFFLINE:
         # not cached and no key: say so instead of a generic "try again"
         raise SourceError("APIFY_KEY is not set — see README")
+    log.info("amazon Apify %s items=%d", status.value, len(items or []))
     if status != FetchStatus.OK or not items:
         raise SourceError("Couldn't read this Amazon product right now. Please try again in a bit.")
     try:

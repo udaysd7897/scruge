@@ -2,6 +2,9 @@ from __future__ import annotations
 
 import re
 
+import logging
+import time
+
 import httpx
 
 from app.models import FetchStatus
@@ -13,6 +16,9 @@ HEADERS = {"User-Agent": UA, "Accept-Language": "en-IN,en;q=0.9"}
 _SOFT_MARKERS = ("access denied", "robot check", "captcha")
 _SOFT_MAX_BYTES = 20_000
 _META_REFRESH = re.compile(r"<meta[^>]+http-equiv=[\"']?refresh", re.I)
+
+
+log = logging.getLogger(__name__)
 
 
 def make_client() -> httpx.AsyncClient:
@@ -34,8 +40,13 @@ def classify(status_code: int, body: str) -> FetchStatus:
 
 
 async def fetch(client: httpx.AsyncClient, url: str) -> tuple[FetchStatus, str]:
+    t = time.monotonic()
     try:
         r = await client.get(url)
-    except httpx.HTTPError:
+    except httpx.HTTPError as e:
+        log.info("fetch ERROR %s (%s) %.1fs", url[:160], type(e).__name__, time.monotonic() - t)
         return FetchStatus.ERROR, ""
-    return classify(r.status_code, r.text), r.text
+    st = classify(r.status_code, r.text)
+    log.log(logging.INFO if st != FetchStatus.OK else logging.DEBUG,
+            "fetch %s http=%s %dB %.1fs %s", st.value, r.status_code, len(r.text), time.monotonic() - t, url[:160])
+    return st, r.text
