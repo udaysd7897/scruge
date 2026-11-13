@@ -14,6 +14,11 @@ from app.models import Candidate, SourceProduct
 MODEL = "claude-sonnet-5-5"
 
 
+def reply_text(msg) -> str:
+    """The reply's text, skipping thinking blocks (a reply may start with one)."""
+    return "".join(getattr(b, "text", "") for b in getattr(msg, "content", None) or [] if getattr(b, "type", "") == "text")
+
+
 async def _img(client: httpx.AsyncClient, url: str | None) -> tuple[str, str] | None:
     if not url:
         return None
@@ -43,7 +48,7 @@ async def same_product(src: SourceProduct, cand: Candidate) -> str:
                 {"type": "text", "text": "Are A and B the exact same product: same design AND same colourway "
                  "(size ignored)? Compare logo, print, panels and colour. Reply only JSON "
                  '{"verdict":"SAME"|"DIFFERENT"|"UNSURE"}.'}]}])
-        m = re.search(r"\{.*\}", msg.content[0].text, re.S)
+        m = re.search(r"\{.*\}", reply_text(msg), re.S)
         v = json.loads(m.group(0)).get("verdict") if m else None
         return v if v in ("SAME", "DIFFERENT", "UNSURE") else "UNSURE"
     except Exception:
@@ -119,7 +124,7 @@ async def pick(src: SourceProduct, cands: list[Candidate]) -> dict:
         content.append({"type": "text", "text": _PICK_PROMPT.format(n=len(cands))})
         async with anthropic.AsyncAnthropic() as ac:
             msg = await ac.messages.create(model=MODEL, max_tokens=900, messages=[{"role": "user", "content": content}])
-        m = re.search(r"\{.*\}", msg.content[0].text, re.S)
+        m = re.search(r"\{.*\}", reply_text(msg), re.S)
         return json.loads(m.group(0)) if m else {}
     except Exception:
         return {}

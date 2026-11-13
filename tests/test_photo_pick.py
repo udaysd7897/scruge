@@ -38,3 +38,13 @@ def test_garbage_is_unclear():
     assert judge({}, 3) == ("unclear", None)
     assert judge({"match": 7, "table": table((S,) * 6)}, 1) == ("unclear", None)
     assert judge({"match": "unclear", "table": table((S,) * 6)}, 1) == ("unclear", None)
+
+
+def test_reply_text_skips_thinking_blocks():
+    # 2026-11-13: replies can start with a thinking block; reading content[0].text crashed and the check
+    # silently returned nothing
+    from types import SimpleNamespace as NS
+    from app.vision import reply_text
+    msg = NS(content=[NS(type="thinking", thinking="..."), NS(type="text", text='{"match": 1}')])
+    assert reply_text(msg) == '{"match": 1}'
+    assert reply_text(NS(content=[])) == ""
