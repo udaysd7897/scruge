@@ -13,7 +13,7 @@ from app.normalize import distinctive_words
 from app.matcher import Match, decide, score
 from app.models import Category, Decision, FetchStatus, Platform, SourceProduct
 from app.sources.myntra import myntra_fetch
-from app.vision import PICK_MAX, attrs_for, differences, judge, pick
+from app.vision import HARD_ATTRS, PICK_MAX, attrs_for, differences, judge, pick
 
 CLOSEST_MAX = 3
 
@@ -81,8 +81,11 @@ async def confirm(client: httpx.AsyncClient, src: SourceProduct, m: Match, picke
         # still Not listed, but these passed every hard check: show the nearest designs (fewest
         # differing attributes; equal MRP / higher score break ties via the pre-shuffle order)
         diffs = {id(c): d for c, d in zip(shuffled, differences(res, len(shuffled), attrs))}
-        # only near designs: a shoe that differs on 6 of 7 attributes is not "close"
-        near = sorted([c for c in top if len(diffs[id(c)]) <= len(attrs) // 2],
+        # only near designs: a shoe that differs on 6 of 7 attributes is not "close", and neither is one
+        # whose photo shows a different neck/colour/cut (the text gate would have rejected it, had the
+        # text said so)
+        near = sorted([c for c in top if len(diffs[id(c)]) <= len(attrs) // 2
+                       and not HARD_ATTRS & set(diffs[id(c)])],
                       key=lambda c: len(diffs[id(c)]))[:CLOSEST_MAX]
         return Match(Decision.NONE, None, "photo", survivors=[], src=m.src, category=m.category,
                      checked=len(shuffled), none_had="the same design in its photo",

@@ -9,7 +9,7 @@ from rapidfuzz import fuzz
 from app.extract import REQUIRED, missing_required
 from app.models import (Candidate, Canonical, Category, Decision, FetchStatus, Outcome, Platform,
                         PlatformResult, SourceProduct)
-from app.normalize import (CODE_BRANDS, colour_set, DESCRIPTOR_WORDS, base_colour, clean_ean, colour_key, distinctive_words, is_accessory,
+from app.normalize import (CODE_BRANDS, colour_set, fabric_set, DESCRIPTOR_WORDS, base_colour, clean_ean, colour_key, distinctive_words, is_accessory,
                            model_base, norm_brand, pack_count, tv_code)
 
 
@@ -69,6 +69,10 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
             return "colour"
         if cat == Category.APPAREL and max(src.pack_count, pack_count(src.title)) != max(c.pack_count, pack_count(cand.title)):
             return "pack count"
+        if cat == Category.APPAREL:
+            fa, fb = fabric_set(src.title, src.brand), fabric_set(cand.title, c.brand)
+            if fa and fb and not fa & fb:
+                return "fabric"  # polyester microfiber vs pure cotton: a different product
         # an equal brand style code is identity: store titles are rewritten per store, so title words
         # are only compared when no shared code proves the product
         # unequal codes only stand in for the title check when the brand's codes are trusted (Nike, Puma):
@@ -441,6 +445,10 @@ def _none_had(s: Canonical, cat: Category, vetoes: list[str]) -> str | None:
         "style code": s.style_code and f"style {s.style_code}",
         "pack count": f"pack of {max(s.pack_count, pack_count(s.title))}",
         "distinctive words": "a matching title",
+        "fabric": (fs := fabric_set(s.title, s.brand)) and f"the same fabric ({', '.join(sorted(fs))})",
+        "neck": s.neck and f"a {s.neck} neck",
+        "gender": s.gender and f"a {s.gender}'s version",
+        "category": "the same kind of product",
     }.get(r)
     return what or r
 

@@ -433,3 +433,22 @@ def agreed_audience(*signals: str | None) -> str | None:
     """The audience every known signal agrees on; a conflict (title "Boys", breadcrumb "Men's") → None."""
     known = {audience(s) for s in signals} - {None}
     return known.pop() if len(known) == 1 else None
+
+
+# ---------------------------------------------------------------- fabric (apparel gate, 2026-11-13)
+
+_FABRIC_WORDS = {"cotton": "cotton", "polyester": "polyester", "poly": "polyester", "microfiber": "polyester",
+                 "microfibre": "polyester", "nylon": "nylon", "linen": "linen", "viscose": "viscose",
+                 "rayon": "viscose", "modal": "viscose", "wool": "wool", "merino": "wool", "silk": "silk"}
+_BLEND = re.compile(r"\bblend(?:ed)?\b|\brich\b|\bmix\b")  # "cotton blend", "cotton rich": anything goes
+
+
+def fabric_set(title: str | None, brand: str | None) -> frozenset[str] | None:
+    """Fabrics a title names ("Polyester ... Microfiber" → {polyester}; "Pure Cotton" → {cotton}). Empty when
+    none is named; None for blends ("Cotton Blend", "Cotton Rich"), which can contain anything. Brand words
+    are skipped ("Cotton County" is a brand, not a fabric)."""
+    t = (title or "").lower()
+    if _BLEND.search(t):
+        return None
+    skip = set(re.findall(r"[a-z]+", (brand or "").lower()))
+    return frozenset(_FABRIC_WORDS[w] for w in re.findall(r"[a-z]+", t) if w in _FABRIC_WORDS and w not in skip)

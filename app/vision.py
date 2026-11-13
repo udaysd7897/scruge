@@ -61,6 +61,9 @@ ATTRS = ("neck", "sleeve", "colour", "logo", "stripes", "print")
 # sneakers (reports/Sneaker cross store matching.md): rows 1-2 decide the model, 3-7 the colourway
 SHOE_ATTRS = ("silhouette", "panels", "logo", "upper_colour", "accents", "sole", "laces")
 PICK_MAX = 5
+# photo rows that mirror a hard text check (neck/colour gates; a shoe's cut/colourway): a listing that
+# differs on one of these is a different product, never a "closest option"
+HARD_ATTRS = {"neck", "colour", "silhouette", "upper_colour"}
 
 
 def attrs_for(cat) -> tuple[str, ...]:

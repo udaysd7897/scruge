@@ -38,3 +38,20 @@ def test_veto_only_not_listed_has_no_closest():
     m = Match(Decision.NONE, None, "no survivors", checked=4, none_had="brand")
     r = to_result(Platform.FLIPKART, m, [FetchStatus.OK], None)
     assert r.outcome == Outcome.NOT_LISTED and r.closest == []
+
+
+async def test_photo_difference_on_a_hard_check_is_not_close():
+    # user report 2026-11-13 (Jockey B0H3QHNZGQ): Amazon title names no neck, so the text gate let a listing
+    # through; the photo saw a different neck. A neck/colour difference would have been a hard reject: such
+    # a listing is not a "closest option"
+    s = src()
+    urls = [MY_URL.replace("35720668", str(35720670 + i)) for i in range(3)]
+    cands = [myntra(url=u) for u in urls]
+
+    async def picker(src_, shown):
+        diff = {urls[0]: ["neck"], urls[1]: ["colour", "logo"], urls[2]: ["logo"]}
+        return {"match": "none", "table": {str(i): {a: ("different" if a in diff[c.url] else "same")
+                for a in ("neck", "sleeve", "colour", "logo", "stripes", "print")} for i, c in enumerate(shown, 1)}}
+    async with client() as cl:
+        m = await confirm.confirm(cl, s, decide(s, cands), picker=picker)
+    assert [c.url for c, _ in m.closest] == [urls[2]]
