@@ -14,8 +14,10 @@ S, A = Category.SNEAKER, Category.APPAREL
 
 
 def cand(title, brand, colour="White", code=None, url="u", mrp=None, gender=None):
+    from app.normalize import base_colour
     return Candidate(Platform.FLIPKART, url, title, Canonical(brand=brand, colour=colour, style_code=code, mrp=mrp,
-                                                             gender=gender, title=title), True)
+                                                             base_colour=base_colour(colour), gender=gender,
+                                                             title=title), True)
 
 
 def sparse(title, crumbs="Shoes & Handbags > Shoes > Men's Shoes > Casual Shoes > Sneakers"):
@@ -52,7 +54,7 @@ def test_relaxed_code_match_is_not_proof():
     # AUSK (user-confirmed) keeps working: AUSK-04065-L = AUSKB-04065
     assert same_style(Canonical(brand="ausk", style_code="AUSK-04065-L"), Canonical(brand="ausk", style_code="AUSKB-04065"))
     sp = from_amazon(json.loads((FX / "amz_sparx_B09PVFDLSK.json").read_text()))
-    m = decide(sp, [cand("Sparx SM 734 Sneakers For Men", "sparx", code="SD0734G", gender="men")])
+    m = decide(sp, [cand("Sparx Stylish Sneakers For Men", "sparx", code="SD0734G", gender="men")])
     assert m.decision == Decision.AMBIGUOUS  # goes to the photo check, not straight to "In stock"
 
 
@@ -95,3 +97,25 @@ def test_multicolour_is_unknown_and_colourless_siblings_are_not_duplicates():
 def test_nike_code_veto_itself():
     src = Canonical(brand="nike", style_code="432997-107", colour="White", family="killshot 2 leather")
     assert veto(src, cand("NIKE KILLSHOT 2 LEATHER", "nike", "White", "432997-070"), S) == "style code"
+
+
+def test_short_model_number_printed_in_listing_title_proves_it():
+    # rerun after review: Sparx Flipkart fell to Possible; its title prints "SM 734" itself (letters + number,
+    # so "SX 734" still doesn't count)
+    sp = from_amazon(json.loads((FX / "amz_sparx_B09PVFDLSK.json").read_text()))
+    hit = cand("Sparx SM 734 | Stylish, Comfortable | Sneakers For Men", "sparx", code="SD0734G", gender="men")
+    other = cand("Sparx SX 734 Sneakers For Men", "sparx", code="SD0734G", gender="men", url="o")
+    assert decide(sp, [hit]).decision == Decision.MATCH
+    assert decide(sp, [other]).decision == Decision.AMBIGUOUS
+
+
+def test_proven_same_model_tie_prefers_exact_colours_and_merges_copies():
+    # live rerun: several sellers list "Sparx SM 734" in White and in "White, Grey": the exact colour wins,
+    # same-colour copies are one product (not "Several listings look equally close")
+    sp = from_amazon(json.loads((FX / "amz_sparx_B09PVFDLSK.json").read_text()))
+    t = "Sparx SM 734 | Stylish, Comfortable | Sneakers For Men"
+    grey = cand(t, "sparx", "White, Grey", code="A1SD0734G-WHGY", gender="men", url="g")
+    w1 = cand(t, "sparx", "White", code="SD0734G", gender="men", url="w1")
+    w2 = cand(t, "sparx", "White", code="I0071328", gender="men", url="w2")
+    m = decide(sp, [grey, w1, w2])
+    assert m.decision == Decision.MATCH and m.candidate.url in ("w1", "w2")

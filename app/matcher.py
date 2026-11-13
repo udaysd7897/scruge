@@ -130,6 +130,13 @@ def _after(key: str, group: str) -> str:
     return m.group(1) if m else ""
 
 
+def _title_has_model_number(src: Canonical, cand: Candidate) -> bool:
+    """A short brand model number printed in the listing's own title, same letters and number: Amazon
+    SM-734 ↔ "Sparx SM 734 | Stylish ..." (not "SX 734"). Only for short codes (letters + 3-4 digits)."""
+    m = re.fullmatch(r"([A-Z]{1,4})-(\d{3,4})", src.style_code or "")
+    return bool(m) and bool(re.search(rf"\b{m.group(1)}[\s-]?0*{m.group(2)}\b", (cand.title or "").upper()))
+
+
 def _digit_groups(code: str) -> frozenset[str]:
     return frozenset(re.findall(r"\d{3,}", code))
 
@@ -139,7 +146,7 @@ def _doubt(src: Canonical, cand: Candidate, cat: Category) -> str | None:
     a doubtful survivor is shown as "Possible match", never as a confident one)."""
     if cat not in (Category.SNEAKER, Category.APPAREL):
         return None
-    if same_style(src, cand.canon):
+    if same_style(src, cand.canon) or _title_has_model_number(src, cand):
         return None  # the brand style code proves the product
     if cat in (Category.APPAREL, Category.SNEAKER):
         # store titles are rewritten per store; MRP + manufacturer + photo (confirm.py) decide instead
@@ -308,7 +315,8 @@ def decide(src: SourceProduct, cands: list[Candidate]) -> Match:
     if len(scored) >= 2 and not fallback:
         if scores[id(top)] - scores[id(scored[1])] < MARGIN:
             group = [c for c in scored if scores[id(top)] - scores[id(c)] < MARGIN]
-            if not _all_duplicates(group):
+            group = _proven_same_model(s, group, cat) or group
+            if not _all_duplicates(group) and len(group) > 1:
                 return Match(Decision.AMBIGUOUS, top, "tie", fallback, pool, **base)
             top = min(group, key=lambda c: (c.in_stock is not True, c.price is None,
                                             c.price or 0, -scores[id(c)]))
@@ -332,6 +340,19 @@ def _unconfirmed(s: Canonical, cand: Candidate, cat: Category) -> list[str]:
     if cat == Category.TV and not (s.model_code and cand.canon.model_code):
         miss.append("model_code")  # no model number on one side: identity can't be confirmed
     return miss
+
+
+def _proven_same_model(s: Canonical, group: list[Candidate], cat: Category) -> list[Candidate] | None:
+    """Sneakers whose every tied listing is proven the same model (style code or the model number in its
+    title): keep those with exactly the source's colours; if they then all show the same colours, they are
+    copies of one product (several sellers of "Sparx SM 734", White) → a one-item group."""
+    if cat != Category.SNEAKER or not all(same_style(s, c.canon) or _title_has_model_number(s, c) for c in group):
+        return None
+    want = colour_set(s.colour)
+    exact = [c for c in group if want and colour_set(c.canon.colour) == want]
+    if not exact:
+        return None
+    return exact[:1] if len({colour_set(c.canon.colour) for c in exact}) == 1 else exact
 
 
 def _dup_code(c: Candidate) -> str | None:
@@ -388,6 +409,8 @@ def _matched_on(s: Canonical, cand: Candidate, cat: Category | None) -> str:
         facts.append("barcode")
     elif same_style(s, c):
         facts.append(f"style {c.style_code}")
+    elif _title_has_model_number(s, cand):
+        facts.append(f"model {s.style_code}")
     elif cand.confirmed:
         facts.append("name, MRP, manufacturer and photo")
     elif c.family or s.family:
