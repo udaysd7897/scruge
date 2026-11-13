@@ -1,0 +1,307 @@
+[
+ {
+  "n": 1,
+  "url": "https://www.amazon.in/Levis-Plain-Regular-T-Shirt-PR681413_White/dp/B07XFMDXY4",
+  "source": {
+   "brand": "levi's",
+   "style_code": "PR681413",
+   "colour": "White(Light Grey Mel)",
+   "gender": "men",
+   "mrp": 649,
+   "official_name": null,
+   "product_type": "tee",
+   "category": "apparel",
+   "title": "Levi's 025 Men's Premium Soft Cotton Solid T-Shirt - Round Neck, Short Sleeves w"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 79 candidates checked, none had brand levi's"
+   },
+   "flipkart": {
+    "outcome": "Possible match \u2013 verify",
+    "url": "https://www.flipkart.com/levi-s-solid-men-round-neck-grey-t-shirt/p/itmf26b20e56a800?pid=TSHFZ24BQV3JHAPW",
+    "reason": "No style code on this listing: matched by name only"
+   }
+  },
+  "secs": 19,
+  "truth": {
+   "myntra": "https://www.myntra.com/lounge-tshirts/levis/levis-men-soft-pure-cotton-round-neck-half-sleeve-tshirt/12027436/buy"
+  }
+ },
+ {
+  "n": 2,
+  "url": "https://www.amazon.in/Jockey-Cotton-Muscle-9930-0105-WHITE-White/dp/B00W066XB2",
+  "source": {
+   "brand": "jockey",
+   "style_code": null,
+   "colour": "White",
+   "gender": "men",
+   "mrp": null,
+   "official_name": null,
+   "product_type": "tee",
+   "category": "apparel",
+   "title": "Jockey 9930 Men Super Combed Cotton Solid Round Neck Muscle Vest"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 110 candidates checked, none had colour White"
+   },
+   "flipkart": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 59 candidates checked, none had brand jockey"
+   }
+  },
+  "secs": 32,
+  "truth": {
+   "flipkart": "https://www.flipkart.com/jockey-men-vest/p/itme8044db58189f?pid=TSHFFTREMEHZDKEU",
+   "myntra": "https://www.myntra.com/innerwear-vests/jockey/jockey-combed-cotton-rib-round-neck-muscle-regular-fit-vest-9930/11443950/buy"
+  }
+ },
+ {
+  "n": 3,
+  "url": "https://www.amazon.in/Leriya-Fashion-Oversized-Shirt-Cotton/dp/B0HCW2KFCR",
+  "source": {
+   "brand": "leriya fashion",
+   "style_code": null,
+   "colour": "Brown",
+   "gender": "men",
+   "mrp": 1999,
+   "official_name": null,
+   "product_type": "tee",
+   "category": "apparel",
+   "title": "Leriya Fashion Oversized T Shirt for Men | Casual Geometric Textured T Shirt for"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 107 candidates checked, none had brand leriya fashion"
+   },
+   "flipkart": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 62 candidates checked, none had brand leriya fashion"
+   }
+  },
+  "secs": 36,
+  "truth": {}
+ },
+ {
+  "n": 4,
+  "url": "https://www.amazon.in/AUSK-Baggy-Hip-Hop-T-Shirt-Men/dp/B0GKVD1YGL/ref=lp_1968123031_1_4",
+  "source": {
+   "brand": "ausk",
+   "style_code": "AUSK-04065-L",
+   "colour": "Maroon",
+   "gender": "men",
+   "mrp": 1499,
+   "official_name": null,
+   "product_type": "tee",
+   "category": "apparel",
+   "title": "AUSK Baggy Hip-Hop T-Shirt for Men - Graphic Printed T Shirts || Oversized Men T"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Possible match \u2013 verify",
+    "url": "https://www.myntra.com/tshirts/ausk/ausk-men-solid-t-shirt/45881745/buy",
+    "reason": "Title too generic to confirm the model"
+   },
+   "flipkart": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 39 candidates checked, none had brand ausk"
+   }
+  },
+  "secs": 40,
+  "truth": {}
+ },
+ {
+  "n": 5,
+  "url": "https://www.amazon.in/Adidas-Striped-Regular-T-Shirt-FJ9216_White_XL/dp/B07VGSJL2X/ref=lp_13678348031_1_1",
+  "source": {
+   "brand": "adidas",
+   "style_code": "FJ9216",
+   "colour": "WHITE",
+   "gender": "men",
+   "mrp": 1199,
+   "official_name": null,
+   "product_type": "tee",
+   "category": "apparel",
+   "title": "adidas Men Polyester Fitted T-Shirt"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 114 candidates checked, none had a matching title"
+   },
+   "flipkart": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 65 candidates checked, none had style FJ9216"
+   }
+  },
+  "secs": 37,
+  "truth": {}
+ },
+ {
+  "n": 6,
+  "url": "https://www.amazon.in/Van-Heusen-Regular-T-Shirt-IHKTS1LBM60001_Blue/dp/B08BJW746R/ref=sr_1_1_sspa",
+  "source": {
+   "brand": "van heusen",
+   "style_code": null,
+   "colour": "Blue Melange",
+   "gender": "men",
+   "mrp": 599,
+   "official_name": null,
+   "product_type": "tee",
+   "category": "apparel",
+   "title": "Van Heusen Cotton Blend Men T-Shirt, Regular Fit"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 91 candidates checked, none had brand van heusen"
+   },
+   "flipkart": {
+    "outcome": "Possible match \u2013 verify",
+    "url": "https://www.flipkart.com/van-heusen-solid-men-round-neck-blue-t-shirt/p/itmc09308ca3ab01?pid=TSHGVRGTUFMKHCHN",
+    "reason": "Title too generic to confirm the model"
+   }
+  },
+  "secs": 19,
+  "truth": {}
+ },
+ {
+  "n": 7,
+  "url": "https://www.amazon.in/Tommy-Hilfiger-Green-Color-T-Shirt/dp/B092SMGN6V/ref=sr_1_1_sspa",
+  "source": {
+   "brand": "tommy hilfiger",
+   "style_code": null,
+   "colour": null,
+   "gender": null,
+   "mrp": 3599,
+   "official_name": null,
+   "product_type": "tee",
+   "category": "apparel",
+   "title": "Tommy Hilfiger Men T-Shirt"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Possible match \u2013 verify",
+    "url": "https://www.myntra.com/tshirts/tommy+hilfiger/tommy-hilfiger-boys--cotton-tshirts/39620474/buy",
+    "reason": "Couldn't read colour on Amazon"
+   },
+   "flipkart": {
+    "outcome": "Possible match \u2013 verify",
+    "url": "https://www.flipkart.com/tommy-hilfiger-men-tan-genuine-leather-wallet/p/itm7f97ed505ed0f?pid=WCWFNET5KCZQ3EA4",
+    "reason": "Couldn't read colour on Amazon"
+   }
+  },
+  "secs": 6,
+  "truth": {}
+ },
+ {
+  "n": 8,
+  "url": "https://www.amazon.in/Bewakoof-Batman-Outline-Printed-T-Shirt/dp/B0BRZW11Y6/ref=sr_1_1_sspa",
+  "source": {
+   "brand": "bewakoof",
+   "style_code": "1053011",
+   "colour": "Black-519159",
+   "gender": "men",
+   "mrp": 1099,
+   "official_name": null,
+   "product_type": "tee",
+   "category": "apparel",
+   "title": "Bewakoof X DC Batman Men's Cotton Graphic Print Oversized Fit Half Sleeve Round "
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Possible match \u2013 verify",
+    "url": "https://www.myntra.com/tshirts/bewakoof/bewakoof-men-black-pure-cotton-t-shirt/12739102/buy",
+    "reason": "Title too generic to confirm the model"
+   },
+   "flipkart": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 36 candidates checked, none had style 1053011"
+   }
+  },
+  "secs": 30,
+  "truth": {}
+ },
+ {
+  "n": 9,
+  "url": "https://www.amazon.in/Amazon-Brand-Mandarin-Tshirts-Sleeves/dp/B07SK7RZBF/ref=sr_1_1_sspa",
+  "source": {
+   "brand": "amazon brand - symbol",
+   "style_code": null,
+   "colour": "Jet Black",
+   "gender": "men",
+   "mrp": 999,
+   "official_name": null,
+   "product_type": "polo",
+   "category": "apparel",
+   "title": "Amazon Brand - Symbol Men's Cotton Rich Polo T Shirt | Mandarin Collar Tshirts |"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 95 candidates checked, none had brand amazon brand - symbol"
+   },
+   "flipkart": {
+    "outcome": "Not listed",
+    "url": null,
+    "reason": "Not listed: 52 candidates checked, none had brand amazon brand - symbol"
+   }
+  },
+  "secs": 37,
+  "truth": {}
+ },
+ {
+  "n": 10,
+  "url": "https://www.amazon.in/adidas-Striped-Regular-Shirt-JE9356_LGTGRE/dp/B0DFWQQF13/ref=sr_1_2_sspa",
+  "source": {
+   "brand": "adidas",
+   "style_code": "JE9356",
+   "colour": "LGTGRE",
+   "gender": "men",
+   "mrp": 1499,
+   "official_name": null,
+   "product_type": "polo",
+   "category": "apparel",
+   "title": "adidas Men Polo Shirt"
+  },
+  "error": null,
+  "results": {
+   "myntra": {
+    "outcome": "Possible match \u2013 verify",
+    "url": "https://www.myntra.com/flip-flops/adidas/adidas-aquo-slip-on-m/38757095/buy",
+    "reason": "Couldn't read colour on Amazon"
+   },
+   "flipkart": {
+    "outcome": "Possible match \u2013 verify",
+    "url": "https://www.flipkart.com/adidas-unisex-adilette-aqua-slides/p/itmb007b2be37714?pid=SFFFBZQZVGGGQ8KA",
+    "reason": "Couldn't read colour on Amazon"
+   }
+  },
+  "secs": 25,
+  "truth": {}
+ }
+]
