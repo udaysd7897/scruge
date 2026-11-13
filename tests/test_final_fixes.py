@@ -392,7 +392,7 @@ async def test_missing_apify_key_is_a_clear_source_error(monkeypatch, tmp_path):
     client = httpx.AsyncClient(transport=httpx.MockTransport(lambda r: calls.append(r) or httpx.Response(500)))
     with pytest.raises(SourceError, match="APIFY_KEY is not set — see README"):
         await get_source(client, "https://www.amazon.in/dp/B0GL8GXNTS")
-    assert not calls
+    assert not [r for r in calls if "apify.com" in str(r.url)]  # only the free page fetch was tried
 
 
 def test_tv_colour_is_ignored_for_pooling():

@@ -9,7 +9,9 @@ import httpx
 from app.extract import from_amazon
 from app.models import FetchStatus, SourceProduct
 from app.sources import apify
+from app.sources.amazon_page import looks_like_product, parse_amazon_page
 from app.sources.apify import run_actor
+from app.sources.http import fetch
 
 ACTOR = "junglee~amazon-crawler"
 _MSG = "Please paste an Amazon.in product link"
@@ -58,6 +60,15 @@ async def resolve_amazon_url(client: httpx.AsyncClient, url: str) -> str:
 
 async def get_source(client: httpx.AsyncClient, url: str) -> SourceProduct:
     dp = await resolve_amazon_url(client, url)
+    # 1. the product page itself (free); 2. Apify (paid, cached) when the page is blocked or unreadable
+    st, html = await fetch(client, dp)
+    if st == FetchStatus.OK:
+        item = parse_amazon_page(html, dp)
+        if looks_like_product(item):
+            try:
+                return from_amazon(item)
+            except Exception:
+                pass
     status, items = await run_actor(
         client,
         ACTOR,

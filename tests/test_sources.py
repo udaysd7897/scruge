@@ -193,7 +193,8 @@ async def test_get_source():
     c = apify_client(json.loads(read("amz_apify.json")), calls)
     sp = await get_source(c, "https://www.amazon.in/Foo/dp/B0GL8GXNTS?x=1")
     assert sp.asin and sp.title
-    assert json.loads(calls[0].content)["categoryOrProductUrls"] == [{"url": "https://www.amazon.in/dp/B0GL8GXNTS"}]
+    actor = [r for r in calls if r.method == "POST"]  # the plain page GET (unreadable here) comes first
+    assert json.loads(actor[0].content)["categoryOrProductUrls"] == [{"url": "https://www.amazon.in/dp/B0GL8GXNTS"}]
     with pytest.raises(SourceError):
         await get_source(apify_client([], []), "https://www.amazon.in/dp/B0AAAAAAAA")
 
