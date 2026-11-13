@@ -45,7 +45,11 @@ def ladder(src: SourceProduct, platform: Platform) -> list[str]:
     elif cat == Category.TV:
         rungs.append(_join(c.brand, c.family or c.model_code, c.screen_in, "inch"))
     elif cat == Category.SNEAKER:
+        # model name first ("bacca bucci stride eclipse"), then the brand's model number as text
+        # ("sparx sm-734": Indian brands print it in the title)
         rungs.append(_join(c.brand, c.family, c.base_colour))
+        if c.style_code:
+            rungs.append(_join(c.brand, c.style_code.lower()))
     elif cat == Category.APPAREL:
         # the brand's own product name is what Myntra lists and Flipkart shows: search it first
         if c.official_name:

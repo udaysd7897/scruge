@@ -68,7 +68,9 @@ async def _walk(client, src: SourceProduct, platform: Platform) -> tuple[Match, 
     for q in rungs:
         t = time.monotonic()
         if q == CODE_RUNG:
-            status, cands = await flipkart_code_candidates(client, c.brand, c.base_colour, c.style_code)
+            status, cands = await flipkart_code_candidates(
+                client, c.brand, c.base_colour, c.style_code,
+                "shoes" if src.category == Category.SNEAKER else "t-shirt")
         else:
             status, cands = await adapter(client, q)
         statuses.append(status)

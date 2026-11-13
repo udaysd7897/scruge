@@ -9,7 +9,7 @@ from rapidfuzz import fuzz
 from app.extract import REQUIRED, missing_required
 from app.models import (Candidate, Canonical, Category, Decision, FetchStatus, Outcome, Platform,
                         PlatformResult, SourceProduct)
-from app.normalize import (DESCRIPTOR_WORDS, base_colour, clean_ean, colour_key, distinctive_words, is_accessory,
+from app.normalize import (colour_set, DESCRIPTOR_WORDS, base_colour, clean_ean, colour_key, distinctive_words, is_accessory,
                            model_base, norm_brand, pack_count, tv_code)
 
 
@@ -62,13 +62,19 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
             return "type"  # tee vs polo is decided by the neck gate (a "collared T-shirt" is a polo)
         if _both(src.style_code, c.style_code) and not same_style(src, c) and _code_brand(src, c):
             return "style code"
-        if _both(src.base_colour, c.base_colour) and src.base_colour != c.base_colour:
+        if cat == Category.SNEAKER:
+            if _colour_clash(src, c):
+                return "colour"
+        elif _both(src.base_colour, c.base_colour) and src.base_colour != c.base_colour:
             return "colour"
         if cat == Category.APPAREL and max(src.pack_count, pack_count(src.title)) != max(c.pack_count, pack_count(cand.title)):
             return "pack count"
         # an equal brand style code is identity: store titles are rewritten per store, so title words
         # are only compared when no shared code proves the product
-        if not same_style(src, c) and (cat == Category.APPAREL or not _both(src.style_code, c.style_code)) \
+        # unequal codes only stand in for the title check when the brand's codes are trusted (Nike, Puma):
+        # Bacca Bucci BBMH9103A-09 vs the "Matrix" listing's BBMH9133 says nothing, the words do
+        if not same_style(src, c) and (cat == Category.APPAREL or not _both(src.style_code, c.style_code)
+                                       or not _code_brand(src, c)) \
                 and _distinct_veto(src, cand):
             return "distinctive words"
     return None
@@ -78,6 +84,22 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
 # different product. Other brands' "codes" are often seller SKUs (Bewakoof 1053011): equal proves, unequal
 # says nothing.
 CODE_BRANDS = {"puma", "nike", "adidas", "reebok", "skechers", "asics", "new balance", "jockey", "ausk"}
+
+
+def _one(x: str | None) -> frozenset[str]:
+    return frozenset([x]) if x else frozenset()
+
+
+def _colour_clash(a: Canonical, b: Canonical) -> bool:
+    """Sneaker colourways as colour sets (sole colours dropped): both multi-colour → the sets must be
+    equal ("Black, White" = "Black and White" ≠ "Grey, White"); a single colour must be one of the other's
+    ("White" fits "Sail/Gum Yellow/Midnight Navy" = {white, navy}). Unknown never clashes."""
+    sa, sb = colour_set(a.colour) or _one(a.base_colour), colour_set(b.colour) or _one(b.base_colour)
+    if not sa or not sb:
+        return False
+    if len(sa) >= 2 and len(sb) >= 2:
+        return sa != sb
+    return not (sa <= sb or sb <= sa)
 
 
 def _code_brand(a: Canonical, b: Canonical) -> bool:
@@ -93,7 +115,13 @@ def same_style(a: Canonical, b: Canonical) -> bool:
     if _style_key(a.style_code) == _style_key(b.style_code):
         return True
     ga, gb = _digit_groups(a.style_code), _digit_groups(b.style_code)
-    return bool(ga) and ga == gb and any(len(g) >= 4 for g in ga)
+    if bool(ga) and ga == gb and any(len(g) >= 4 for g in ga):
+        return True
+    # Indian-brand model numbers: Amazon "SM-734" = Flipkart "SD0734G" / "A1SD0734G-WHGY" (one 3+ digit
+    # group, leading zeros dropped). Only between short codes: Nike 432997-107 never reaches here equal.
+    za = {g.lstrip("0") for g in ga} - {""}
+    zb = {g.lstrip("0") for g in gb} - {""}
+    return len(za) == 1 and za == zb and not _code_brand(a, b)
 
 
 def _digit_groups(code: str) -> frozenset[str]:
@@ -107,7 +135,7 @@ def _doubt(src: Canonical, cand: Candidate, cat: Category) -> str | None:
         return None
     if same_style(src, cand.canon):
         return None  # the brand style code proves the product
-    if cat == Category.APPAREL:
+    if cat in (Category.APPAREL, Category.SNEAKER):
         # store titles are rewritten per store; MRP + manufacturer + photo (confirm.py) decide instead
         return None if cand.confirmed else NEEDS_CONFIRM
     a, b = distinctive_words(_src_text(src), src.brand), distinctive_words(cand.title, cand.canon.brand)
@@ -143,7 +171,11 @@ def _style_key(code: str) -> str:
 def _src_text(src: Canonical) -> str:
     """What the listing title is compared with: the brand's official product name when known (Amazon's
     fashion titles are generic: "Puma Men Polyester Solid Regular Fit T-Shirt"), else Amazon's title."""
-    return f"{src.brand or ''} {src.official_name}".strip() if src.official_name else src.title
+    if src.official_name:
+        return f"{src.brand or ''} {src.official_name}".strip()
+    if src.model_name and src.model_name not in (src.title or "").lower():
+        return f"{src.brand or ''} {src.model_name} {src.title or ''}".strip()  # "Stride Eclipse" isn't in the title
+    return src.title
 
 
 def _distinct_veto(src: Canonical, cand: Candidate) -> bool:
@@ -306,6 +338,10 @@ def _all_duplicates(group: list[Candidate]) -> bool:
     eans = {clean_ean(c.canon.ean) if c.canon.ean else None for c in group}
     if len(eans) == 1 and None not in eans:
         return True
+    styles = {_style_key(c.canon.style_code) if c.canon.style_code else None for c in group}
+    if None not in styles and all(same_style(group[0].canon, c.canon) for c in group) \
+            and len({colour_set(c.canon.colour) for c in group}) == 1:
+        return True  # one fashion style in one colour listed twice (AUSKB-04065 / AUSK04065, both Maroon)
     codes = {_dup_code(c) for c in group}
     if len(codes) != 1 or None in codes:
         return False

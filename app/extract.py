@@ -8,7 +8,7 @@ from html import unescape
 from app.models import Candidate, Canonical, Category, Platform, SourceProduct
 from app.normalize import (
     base_colour, clean_ean, is_accessory, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage,
-    neck_type, product_type, screen_inches, store_kind, tv_family,
+    neck_type, product_type, screen_inches, store_kind, tv_family, agreed_audience, audience,
 )
 
 REQUIRED: dict[Category, list[str]] = {
@@ -75,6 +75,8 @@ def missing_required(c: Canonical, cat: Category) -> list[str]:
             continue  # Apple doesn't publish iPhone RAM; the RAM veto still applies when both sides show it
         if cat == Category.TV and f == "family" and c.model_code:
             continue
+        if cat == Category.SNEAKER and f == "family" and c.style_code:
+            continue  # Sparx "SM-734": the model number is the model
         out.append(f)
     return out
 
@@ -125,18 +127,32 @@ def style_code_like(s: str | None) -> str | None:
     return s
 
 
+_SHORT_CODE = re.compile(r"([A-Z]{1,4})[\s-]?(\d{3,})")
+
+
+def sneaker_code_like(s: str | None) -> str | None:
+    """A brand code, or a short model number of letters + 3 digits ("SM-734", "SM 734" → "SM-734")."""
+    code = style_code_like(s)
+    if code:
+        return code
+    m = _SHORT_CODE.fullmatch((s or "").strip().upper())
+    return f"{m.group(1)}-{m.group(2)}" if m else None
+
+
 _AMAZON_STYLE_KEYS = ("Style Number", "Item model number", "Manufacturer Part Number", "Model Number")
 
 
-def _amazon_style(at: dict[str, str]) -> str | None:
-    for k in _AMAZON_STYLE_KEYS:  # the whole value is a code ("52885601")
-        code = style_code_like(at.get(k))
+def _amazon_style(at: dict[str, str], like=style_code_like) -> str | None:
+    at = {k.lower(): v for k, v in at.items()}  # "Manufacturer part number" vs "Manufacturer Part Number"
+    keys = [k.lower() for k in _AMAZON_STYLE_KEYS]
+    for k in keys:  # the whole value is a code ("52885601")
+        code = like(at.get(k))
         if code:
             return code
-    for k in _AMAZON_STYLE_KEYS:  # a code followed by colour/size ("9930-0105-WHITE White L")
+    for k in keys:  # a code followed by colour/size ("9930-0105-WHITE White L")
         first = (at.get(k) or "").split(" ")[0]
         if not re.search(r"pack|set|combo", first, re.I):
-            code = style_code_like(first)
+            code = like(first)
             if code:
                 return code
     return None
@@ -152,6 +168,21 @@ def _amazon_model_name(at: dict[str, str]) -> str | None:
         return None  # a seller SKU ("LF-M.T-Shirt-DP-MT1213") is not a name either
     words = [w for w in re.split(r"[_\s]+", v.lower()) if w and w not in _MODEL_NAME_TAGS]
     return " ".join(words) or None
+
+
+_GENERIC_SHOE = {"leather", "stylish", "classic", "trendy", "comfortable", "lightweight", "premium", "new"}
+
+
+def _sneaker_model(at: dict[str, str], brand: str | None) -> str | None:
+    """Amazon "Model Name" minus brand words ("Bacca Bucci Stride Eclipse" → "stride eclipse"). A model
+    number ("Sm-734") is a code, not a name."""
+    v = (at.get("Model Name") or "").strip()
+    if not v or sneaker_code_like(v):
+        return None
+    drop = set(re.findall(r"[a-z0-9]+", (brand or "").lower()))
+    words = [w for w in re.findall(r"[a-z0-9]+", v.lower()) if w not in drop]
+    name = " ".join(words)
+    return name if name and name not in _GENERIC_SHOE else None
 
 
 _MODEL_NAME_TAGS = {"smu", "nos", "ss", "aw", "fw", "core"}  # internal season/channel tags in brand line names
@@ -259,6 +290,10 @@ def from_amazon(item: dict) -> SourceProduct:
         m = re.search(r"\(([^,)]+),", title)
         colour = m.group(1).strip() if m else None
     raw_brand = item.get("brand") or at.get("Brand Name")
+    if not raw_brand and cat in (Category.SNEAKER, Category.APPAREL) and title.split():
+        # sparse Apify record (Nike Killshot B00770CB12 has no brand): fashion titles open with the brand
+        raw_brand = title.split()[0]
+        brand = norm_brand(raw_brand)
     code = _amazon_tv_code(at, screen_inches(title)) if cat == Category.TV else None
     if cat in (Category.SNEAKER, Category.APPAREL):
         # model line ends at the first "(", "," or "|" ("..., Black/White-Anthracite, 8 UK")
@@ -280,15 +315,22 @@ def from_amazon(item: dict) -> SourceProduct:
         colour=colour,
         base_colour=base_colour(colour),
         product_type=product_type(title, item.get("breadCrumbs")) if cat == Category.APPAREL else None,
-        style_code=_amazon_style(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
-        model_name=_amazon_model_name(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
-        gender=_gender(at.get("Department")) if cat in (Category.SNEAKER, Category.APPAREL) else None,
+        style_code=(_amazon_style(at, sneaker_code_like) if cat == Category.SNEAKER
+                    else _amazon_style(at) if cat == Category.APPAREL else None),
+        model_name=(_sneaker_model(at, raw_brand) if cat == Category.SNEAKER
+                    else _amazon_model_name(at) if cat == Category.APPAREL else None),
+        gender=(agreed_audience(at.get("Department"), title, item.get("breadCrumbs")) if cat == Category.SNEAKER
+                else _gender(at.get("Department")) if cat == Category.APPAREL else None),
         neck=_amazon_neck(item, at) if cat == Category.APPAREL else None,
         # no strike-through list price means the product isn't discounted: the price is the MRP
         mrp=int((item.get("listPrice") or {}).get("value") or (item.get("price") or {}).get("value") or 0) or None,
         maker=norm_maker(at.get("Manufacturer Contact Information") or at.get("Manufacturer")),
         title=title,
     )
+    if cat == Category.SNEAKER:
+        # the model name ("Stride Eclipse") is the shoe's identity; a title remnant like "leather" or
+        # "stylish" is not
+        canon.family = canon.model_name or (family if family and family not in _GENERIC_SHOE else None)
     img = (item.get("highResolutionImages") or [None])[0] or item.get("thumbnailImage")
     return SourceProduct(url=item.get("url") or "", asin=item.get("asin") or "", title=title, image=img,
                          category=cat, canon=canon, missing_required=missing_required(canon, cat))
@@ -376,7 +418,7 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     p = prods[0]
     toks = _tokens(html)
     labels = ("Model Number", "Model Name", "RAM", "Internal Storage", "Color", "Display Size",
-              "Style Code", "Article Number", "Type", "Neck")
+              "Style Code", "Article Number", "Type", "Neck", "Ideal For")
     spec: dict[str, str] = {}
     for i, t in enumerate(toks[:-1]):
         if t in labels and t not in spec:
@@ -405,8 +447,14 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
         # Black T-Shirt"); the page shows the brand's own title ("PUMA M Train All Day ESSENTIAL ...")
         shown = _fk_shown_title(html, brand)
         title = shown or title
-        style = style_code_like(spec.get("Style Code") or spec.get("Article Number"))
-        fam = model_line(spec.get("Model Name") or title, brand)
+        if fk_cat == Category.SNEAKER:
+            # "Sparx SM 734 | Stylish ... For Men (White , 9)": the bracket is colour + size
+            title = re.sub(r"\s*\([^()]*,\s*[\d.]+\s*\)\s*$", "", title)
+            style = sneaker_code_like(spec.get("Style Code") or spec.get("Article Number"))
+            fam = model_line(re.split(r"[|:]", spec.get("Model Name") or title)[0], brand)
+        else:
+            style = style_code_like(spec.get("Style Code") or spec.get("Article Number"))
+            fam = model_line(spec.get("Model Name") or title, brand)
     elif fk_cat == Category.TV:
         fam = tv_family(spec.get("Model Name"), brand)
     else:
@@ -425,11 +473,15 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
         neck=(neck_type(spec.get("Neck")) or neck_type(spec.get("Type")) or neck_type(title))
         if fk_cat == Category.APPAREL else None,
         kind=store_kind(str(p.get("category") or "") or None),
+        gender=agreed_audience(spec.get("Ideal For"), title) if fk_cat == Category.SNEAKER else None,
         title=title,
     )
     price = offers.get("price")
+    img = p.get("image")
+    img = (img[0] if isinstance(img, list) and img else img) if img else None
     return [Candidate(Platform.FLIPKART, url, canon.title, canon, _fk_stock(offers.get("availability")),
-                      int(float(price)) if price is not None else None, m.group(1) if m else None)]
+                      int(float(price)) if price is not None else None, m.group(1) if m else None,
+                      image=img if isinstance(img, str) else None)]
 
 
 _MYNTRA_TYPES = {"tshirts": "tee", "t-shirts": "tee", "polo": "polo", "polo tshirts": "polo", "jerseys": "jersey"}

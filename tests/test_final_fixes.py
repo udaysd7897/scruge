@@ -186,7 +186,8 @@ def test_e2e_sneaker():
                    ("ADIDAS Men Grand Court 3.0 Tennis Shoes", "ADIDAS", "Black", "Casual Shoes", True),
                    ("ADIDAS Men Grand Court 2.0 Tennis Shoes", "ADIDAS", "White", "Casual Shoes", True))
     r = _e2e(sp, MYNTRA, cands)
-    assert r.outcome == Outcome.IN_STOCK and r.url == cands[0].url
+    # sneaker POC (2026-11-13): a name-only sneaker match needs the photo check (+ MRP or maker), like apparel
+    assert r.outcome == Outcome.POSSIBLE and r.url == cands[0].url
 
 
 def test_e2e_apparel():

@@ -20,7 +20,7 @@ TV_SIZES = [24, 32, 40, 43, 50, 55, 65, 75, 85, 98]
 COLOUR_SYNONYMS: dict[str, str] = {
     "black": "black", "onyx": "black", "jet": "black", "carbon": "black", "midnight": "black",
     "phantom": "black", "obsidian": "black", "ebony": "black",
-    "white": "white", "ivory": "white", "cream": "white", "pearl": "white", "snow": "white",
+    "white": "white", "ivory": "white", "cream": "white", "sail": "white", "bone": "white", "ecru": "white", "pearl": "white", "snow": "white",
     "grey": "grey", "gray": "grey", "charcoal": "grey", "silver": "grey", "slate": "grey",
     "graphite": "grey", "titanium": "grey", "ash": "grey", "steel": "grey",
     "navy": "navy",
@@ -386,3 +386,45 @@ def store_kind(label: str | None) -> str | None:
     if not label:
         return None
     return "top" if label.strip().lower() in _TOP_KINDS else "other"
+
+
+# ---------------------------------------------------------------- sneakers (POC 2026-11-13)
+
+SOLE_WORDS = {"gum", "sole", "outsole", "midsole"}  # "Gum Yellow" names the sole, not the upper
+
+
+def colour_set(s: str | None) -> frozenset[str]:
+    """Every base colour named, sole colours dropped: "Black and White" = {black, white} = "White, Black";
+    "Sail/Gum Yellow/Midnight Navy" = {white, navy}. Empty when nothing is recognised."""
+    s = re.sub(r"\(.*?\)", " ", (s or "").lower())
+    out = set()
+    for seg in re.split(r"[/,&+|]|\band\b|\s-\s|-(?=[a-z])", s):
+        words = re.findall(r"[a-z]+", seg)
+        if not words or SOLE_WORDS & set(words):
+            continue
+        hit = _base_colour_words(" ".join(words))
+        if hit:
+            out.add(hit)
+    return frozenset(out)
+
+
+_AUDIENCE = [("kids", r"\b(kids?|boys?|girls?|gs|ps|td|older|junior|infants?|toddlers?)\b"),
+             ("women", r"\b(women'?s?|womens|wmns|ladies|w)\b"),
+             ("men", r"\b(men'?s?|mens|man|gents)\b"),
+             ("unisex", r"\bunisex\b")]
+
+
+def audience(text: str | None) -> str | None:
+    """men / women / kids / unisex from one field ("mens", "Sneakers For Men", "NIKE W KILLSHOT 2",
+    "Nike Boys ..."); None when it names none or several (except unisex, which wins)."""
+    t = (text or "").lower().replace("\u2019", "'")
+    if re.search(_AUDIENCE[3][1], t):
+        return "unisex"
+    hits = {g for g, p in _AUDIENCE[:3] if re.search(p, t)}
+    return hits.pop() if len(hits) == 1 else None
+
+
+def agreed_audience(*signals: str | None) -> str | None:
+    """The audience every known signal agrees on; a conflict (title "Boys", breadcrumb "Men's") → None."""
+    known = {audience(s) for s in signals} - {None}
+    return known.pop() if len(known) == 1 else None

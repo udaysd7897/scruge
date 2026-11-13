@@ -12,7 +12,7 @@ from app.extract import myntra_pdp_maker
 from app.matcher import Match, decide, score
 from app.models import Category, Decision, FetchStatus, Platform, SourceProduct
 from app.sources.http import fetch
-from app.vision import PICK_MAX, differences, judge, pick
+from app.vision import PICK_MAX, attrs_for, differences, judge, pick
 
 CLOSEST_MAX = 3
 
@@ -43,20 +43,34 @@ async def confirm(client: httpx.AsyncClient, src: SourceProduct, m: Match, picke
     """One photo-check call over the top survivors (shuffled; the table must back the answer):
     match k + (MRP equal or same manufacturer) → MATCH; match k alone → Possible, linked to k;
     a clean "none" → NONE (Not listed); unclear/no key/error → unchanged (Possible)."""
-    if src.category != Category.APPAREL or m.decision != Decision.AMBIGUOUS or src.missing_required:
+    if src.category not in (Category.APPAREL, Category.SNEAKER) or m.decision != Decision.AMBIGUOUS \
+            or src.missing_required:
         return m
     mrp = src.canon.mrp
-    top = sorted(m.survivors, key=lambda c: (not (mrp and c.canon.mrp == mrp),
-                                             -score(src.canon, c, src.category)))[:PICK_MAX]
+    ranked = sorted(m.survivors, key=lambda c: (not (mrp and c.canon.mrp == mrp),
+                                                -score(src.canon, c, src.category)))
+    # sizes of one shoe are separate Flipkart listings: one photo slot per title + colour. Not for apparel:
+    # two different prints often share a generic title ("Bewakoof Men Black T-shirt")
+    top, seen = [], set()
+    for c in ranked:
+        key = (re.sub(r"\W+", " ", (c.title or "").lower()).strip(), (c.canon.colour or "").lower()) \
+            if src.category == Category.SNEAKER else c.url
+        if key not in seen:
+            seen.add(key)
+            top.append(c)
+    top = top[:PICK_MAX]
+    attrs = attrs_for(src.category)
     shuffled = top[:]
     random.Random(src.asin or src.title).shuffle(shuffled)  # no listing is always "1"; reproducible per item
     res = await picker(src, shuffled)
-    verdict, k = judge(res, len(shuffled))
+    verdict, k = judge(res, len(shuffled), attrs)
     if verdict == "none":
         # still Not listed, but these passed every hard check: show the nearest designs (fewest
         # differing attributes; equal MRP / higher score break ties via the pre-shuffle order)
-        diffs = {id(c): d for c, d in zip(shuffled, differences(res, len(shuffled)))}
-        near = sorted(top, key=lambda c: len(diffs[id(c)]))[:CLOSEST_MAX]
+        diffs = {id(c): d for c, d in zip(shuffled, differences(res, len(shuffled), attrs))}
+        # only near designs: a shoe that differs on 6 of 7 attributes is not "close"
+        near = sorted([c for c in top if len(diffs[id(c)]) <= len(attrs) // 2],
+                      key=lambda c: len(diffs[id(c)]))[:CLOSEST_MAX]
         return Match(Decision.NONE, None, "photo", survivors=[], src=m.src, category=m.category,
                      checked=len(shuffled), none_had="the same design in its photo",
                      closest=[(c, diffs[id(c)]) for c in near])

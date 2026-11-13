@@ -129,12 +129,12 @@ def code_card_links(html: str, code: str) -> list[str]:
 
 
 async def flipkart_code_candidates(client: httpx.AsyncClient, brand: str | None, colour: str | None,
-                                   code: str | None) -> tuple[FetchStatus, list[Candidate]]:
+                                   code: str | None, noun: str = "t-shirt") -> tuple[FetchStatus, list[Candidate]]:
     """Find listings by brand style code. Flipkart's text search doesn't index codes and ranks small
     brands low (AUSK on page 2); a brand(+colour)-filtered listing does, and card image names carry codes."""
     if not (brand and code and _code_groups(code)):
         return FetchStatus.EMPTY, []
-    base = (f"https://www.flipkart.com/search?q={quote_plus(brand + ' t-shirt')}"
+    base = (f"https://www.flipkart.com/search?q={quote_plus(brand + ' ' + noun)}"
             f"&p%5B%5D={quote('facets.brand[]=' + brand.upper())}")
     if colour:
         base += f"&p%5B%5D={quote('facets.color[]=' + colour.title())}"

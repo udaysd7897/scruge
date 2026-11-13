@@ -58,7 +58,13 @@ async def same_product(src: SourceProduct, cand: Candidate) -> str:
 # ---------------------------------------------------------------- one-call photo check (2026-11-13)
 
 ATTRS = ("neck", "sleeve", "colour", "logo", "stripes", "print")
+# sneakers (reports/Sneaker cross store matching.md): rows 1-2 decide the model, 3-7 the colourway
+SHOE_ATTRS = ("silhouette", "panels", "logo", "upper_colour", "accents", "sole", "laces")
 PICK_MAX = 5
+
+
+def attrs_for(cat) -> tuple[str, ...]:
+    return SHOE_ATTRS if getattr(cat, "value", cat) == "sneaker" else ATTRS
 
 _PICK_PROMPT = (
     "Image A is the product to find. Images 1-{n} are candidate listings from another store.\n"
@@ -69,6 +75,20 @@ _PICK_PROMPT = (
     "Reply with JSON only: {{\"table\": {{\"1\": {{\"neck\": ..., \"sleeve\": ..., \"colour\": ..., \"logo\": ..., "
     "\"stripes\": ..., \"print\": ...}}, ...}}, \"match\": <number>|\"none\"|\"unclear\", "
     "\"differences\": {{\"<number>\": \"<the specific difference>\"}}}}")
+
+_SHOE_PROMPT = (
+    "Image A is the shoe to find. Images 1-{n} are candidate listings from another store.\n"
+    "For EACH candidate compare the shoe with A on: silhouette (cut, toe, height), panels (overlay layout, "
+    "toe cap, heel tab), logo (type, position, its colour), upper_colour (base colour and material; sail/"
+    "off-white vs pure white counts), accents (colour of each trim zone), sole (midsole shape and colour, "
+    "gum vs white), laces (and eyelets). The colourway must match exactly: the same model in other colours "
+    "(black/white vs white/black) is 'different'. Camera angle, size, pair vs single and background don't "
+    "matter; the inner side may show a smaller logo.\n"
+    "Mark each attribute 'same', 'different' or 'unclear' (unclear when it can't be seen).\n"
+    "Then answer which candidate is the exact same product as A, or 'none', or 'unclear'.\n"
+    "Reply with JSON only: {{\"table\": {{\"1\": {{\"silhouette\": ..., \"panels\": ..., \"logo\": ..., "
+    "\"upper_colour\": ..., \"accents\": ..., \"sole\": ..., \"laces\": ...}}, ...}}, "
+    "\"match\": <number>|\"none\"|\"unclear\", \"differences\": {{\"<number>\": \"<the specific difference>\"}}}}")
 
 
 def small_image(url: str | None) -> str | None:
@@ -83,22 +103,22 @@ def small_image(url: str | None) -> str | None:
     return url
 
 
-def differences(res: dict, n: int) -> list[list[str]]:
+def differences(res: dict, n: int, attrs: tuple[str, ...] = ATTRS) -> list[list[str]]:
     """Attributes the table marks 'different' for each of the n candidates (in ATTRS order)."""
     table = res.get("table") if isinstance(res, dict) else None
     table = table if isinstance(table, dict) else {}
-    return [[a for a in ATTRS if str((table.get(str(i + 1)) or {}).get(a, "")).lower() == "different"]
+    return [[a for a in attrs if str((table.get(str(i + 1)) or {}).get(a, "")).lower() == "different"]
             for i in range(n)]
 
 
-def judge(res: dict, n: int) -> tuple[str, int | None]:
+def judge(res: dict, n: int, attrs: tuple[str, ...] = ATTRS) -> tuple[str, int | None]:
     """Accept the model's answer only when its own table backs it:
     match k → k has no 'different' (and some 'same') and every other candidate has a 'different';
     none → every candidate has a named 'different'. Anything else is 'unclear'."""
     table = res.get("table") if isinstance(res, dict) else None
     if not isinstance(table, dict):
         return "unclear", None
-    rows = [{a: str((table.get(str(i + 1)) or {}).get(a, "unclear")).lower() for a in ATTRS} for i in range(n)]
+    rows = [{a: str((table.get(str(i + 1)) or {}).get(a, "unclear")).lower() for a in attrs} for i in range(n)]
     differs = [any(v == "different" for v in r.values()) for r in rows]
     clean = [not d and any(v == "same" for v in r.values()) for r, d in zip(rows, differs)]
     ans = res.get("match")
@@ -129,7 +149,8 @@ async def pick(src: SourceProduct, cands: list[Candidate]) -> dict:
         for i, (c, im) in enumerate(zip(cands, imgs[1:]), 1):
             content += [{"type": "text", "text": f"Image {i}: {c.title} (colour {c.canon.colour})"},
                         {"type": "image", "source": {"type": "base64", "media_type": im[0], "data": im[1]}}]
-        content.append({"type": "text", "text": _PICK_PROMPT.format(n=len(cands))})
+        prompt = _SHOE_PROMPT if attrs_for(src.category) is SHOE_ATTRS else _PICK_PROMPT
+        content.append({"type": "text", "text": prompt.format(n=len(cands))})
         async with anthropic.AsyncAnthropic() as ac:
             msg = await ac.messages.create(model=MODEL, max_tokens=900, messages=[{"role": "user", "content": content}])
         m = re.search(r"\{.*\}", reply_text(msg), re.S)
