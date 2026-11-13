@@ -83,6 +83,14 @@ def small_image(url: str | None) -> str | None:
     return url
 
 
+def differences(res: dict, n: int) -> list[list[str]]:
+    """Attributes the table marks 'different' for each of the n candidates (in ATTRS order)."""
+    table = res.get("table") if isinstance(res, dict) else None
+    table = table if isinstance(table, dict) else {}
+    return [[a for a in ATTRS if str((table.get(str(i + 1)) or {}).get(a, "")).lower() == "different"]
+            for i in range(n)]
+
+
 def judge(res: dict, n: int) -> tuple[str, int | None]:
     """Accept the model's answer only when its own table backs it:
     match k → k has no 'different' (and some 'same') and every other candidate has a 'different';

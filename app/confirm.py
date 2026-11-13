@@ -12,7 +12,9 @@ from app.extract import myntra_pdp_maker
 from app.matcher import Match, decide, score
 from app.models import Category, Decision, FetchStatus, Platform, SourceProduct
 from app.sources.http import fetch
-from app.vision import PICK_MAX, judge, pick
+from app.vision import PICK_MAX, differences, judge, pick
+
+CLOSEST_MAX = 3
 
 
 
@@ -48,10 +50,16 @@ async def confirm(client: httpx.AsyncClient, src: SourceProduct, m: Match, picke
                                              -score(src.canon, c, src.category)))[:PICK_MAX]
     shuffled = top[:]
     random.Random(src.asin or src.title).shuffle(shuffled)  # no listing is always "1"; reproducible per item
-    verdict, k = judge(await picker(src, shuffled), len(shuffled))
+    res = await picker(src, shuffled)
+    verdict, k = judge(res, len(shuffled))
     if verdict == "none":
+        # still Not listed, but these passed every hard check: show the nearest designs (fewest
+        # differing attributes; equal MRP / higher score break ties via the pre-shuffle order)
+        diffs = {id(c): d for c, d in zip(shuffled, differences(res, len(shuffled)))}
+        near = sorted(top, key=lambda c: len(diffs[id(c)]))[:CLOSEST_MAX]
         return Match(Decision.NONE, None, "photo", survivors=[], src=m.src, category=m.category,
-                     checked=len(shuffled), none_had="the same design in its photo")
+                     checked=len(shuffled), none_had="the same design in its photo",
+                     closest=[(c, diffs[id(c)]) for c in near])
     if verdict != "match":
         return m
     cand = shuffled[k]

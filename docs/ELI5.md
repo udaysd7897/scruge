@@ -79,6 +79,10 @@ Saying "they don't have it" when we never looked would be a fib.
 - **No shared code (Myntra apparel):** matched by name only is never enough. `confirm.py` requires
   equal MRP, the same manufacturer on the Myntra product page, and a SAME verdict from a photo
   comparison (needs `ANTHROPIC_API_KEY`), with exactly one survivor passing. Otherwise "Possible match".
+- **Closest options:** when listings pass every hard check but the photo check shows none has the same
+  design, the status stays "Not listed" and up to 3 closest listings are shown under it, fewest
+  differences first, each with what differs (e.g. "logo, print differ"). If nothing passed the hard
+  checks, nothing is shown: a wrong brand, neck or colour is never offered as "close".
 - **States:** In stock / Out of stock (link + "Matched on ..."), Not listed, Possible match - verify,
   Couldn't check (blocked, error or timeout: Croma 90 s, Flipkart 45 s, Myntra 20 s). A failed fetch
   never becomes "Not listed".

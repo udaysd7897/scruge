@@ -94,3 +94,6 @@ class PlatformResult:
     url: str | None
     reason: str
     colour_fallback_note: str | None = None
+    # Not listed, but these passed every hard check; the photo showed a different design
+    # [{title, url, differs}] (user request 2026-11-13)
+    closest: list[dict] = field(default_factory=list)

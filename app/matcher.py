@@ -200,6 +200,7 @@ class Match:
     src_missing: list[str] = field(default_factory=list)
     checked: int = 0
     none_had: str | None = None
+    closest: list[tuple[Candidate, list[str]]] = field(default_factory=list)  # (listing, what differs)
 
 
 def _stock_rank(c: Candidate) -> int:
@@ -381,6 +382,12 @@ def _none_had(s: Canonical, cat: Category, vetoes: list[str]) -> str | None:
 
 # ---------------------------------------------------------------- outcome (§6.7)
 
+def _differs(attrs: list[str]) -> str:
+    if not attrs:
+        return "design differs"
+    return ", ".join(attrs) + (" differs" if len(attrs) == 1 else " differ")
+
+
 def to_result(platform: Platform, match: Match, statuses: list[FetchStatus],
               src_colour: str | None) -> PlatformResult:
     m, cand = match, match.candidate
@@ -395,7 +402,8 @@ def to_result(platform: Platform, match: Match, statuses: list[FetchStatus],
             reason = f"Not listed: no results on {platform.value.capitalize()}"
         else:
             reason = f"Not listed: {m.checked} candidates checked, none had {m.none_had or 'a match'}"
-        return PlatformResult(platform, Outcome.NOT_LISTED, None, reason)
+        return PlatformResult(platform, Outcome.NOT_LISTED, None, reason, closest=[
+            {"title": c.title, "url": c.url, "differs": _differs(d)} for c, d in m.closest])
 
     note = None
     if m.colour_fallback and src_colour and cand.canon.colour:
