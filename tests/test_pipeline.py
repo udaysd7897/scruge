@@ -258,7 +258,7 @@ async def test_tie_calls_llm_and_resolves(monkeypatch):
 
 
 def test_timeouts():
-    assert pipeline.TIMEOUTS == {CROMA: 90, FLIPKART: 90, MYNTRA: 60}  # raised 2026-11-13 with retry+backoff
+    assert pipeline.TIMEOUTS == {CROMA: 90, FLIPKART: 90, MYNTRA: 90}  # raised 2026-11-13 with retry+backoff; Myntra 60→90 with short attempts
 
 
 async def test_closing_stream_cancels_pending_platforms(monkeypatch):

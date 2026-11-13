@@ -12,7 +12,7 @@ from app.extract import myntra_pdp_maker
 from app.normalize import distinctive_words
 from app.matcher import Match, decide, score
 from app.models import Category, Decision, FetchStatus, Platform, SourceProduct
-from app.sources.http import fetch
+from app.sources.myntra import myntra_fetch
 from app.vision import PICK_MAX, attrs_for, differences, judge, pick
 
 CLOSEST_MAX = 3
@@ -49,7 +49,7 @@ async def _maker_ok(client, src: SourceProduct, cand) -> bool:
         return same_maker(src.canon.maker, cand.canon.maker)
     if cand.platform != Platform.MYNTRA:
         return False
-    st, html = await fetch(client, cand.url)
+    st, html = await myntra_fetch(client, cand.url)
     return st == FetchStatus.OK and same_maker(src.canon.maker, myntra_pdp_maker(html))
 
 

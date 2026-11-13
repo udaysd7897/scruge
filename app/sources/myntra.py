@@ -15,9 +15,19 @@ def _slug(q: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", q.lower()).strip("-")
 
 
+# Myntra answers a search in ~1 s but stalls on and off (ReadTimeout, 2026-11-13): short attempts and
+# more of them beat one long wait. 4 tries x 8 s + 1+2+4 s backoff fits the 90 s platform budget.
+ATTEMPT_TIMEOUT = 8.0
+BACKOFF = (1.0, 2.0, 4.0)
+
+
+async def myntra_fetch(client: httpx.AsyncClient, url: str) -> tuple[FetchStatus, str]:
+    return await fetch(client, url, timeout=ATTEMPT_TIMEOUT, backoff=BACKOFF)
+
+
 async def myntra_candidates(client: httpx.AsyncClient, q: str) -> tuple[FetchStatus, list[Candidate]]:
     url = f"https://www.myntra.com/{_slug(q)}?rawQuery={quote_plus(q)}"
-    status, html = await fetch(client, url)
+    status, html = await myntra_fetch(client, url)
     if status != FetchStatus.OK:
         return status, []
     marker = "window.__myx = "

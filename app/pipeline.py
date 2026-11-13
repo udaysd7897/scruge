@@ -34,7 +34,7 @@ ADAPTERS = {
     Platform.CROMA: croma_candidates,
     Platform.MYNTRA: myntra_candidates,
 }
-TIMEOUTS: dict[Platform, float] = {Platform.CROMA: 90, Platform.FLIPKART: 90, Platform.MYNTRA: 60}
+TIMEOUTS: dict[Platform, float] = {Platform.CROMA: 90, Platform.FLIPKART: 90, Platform.MYNTRA: 90}
 UNSUPPORTED = "This product isn't a phone, TV, sneaker or T-shirt/polo/jersey."
 
 

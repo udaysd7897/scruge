@@ -44,25 +44,28 @@ BACKOFF = (1.0, 3.0)  # seconds before retry 1 and 2; transient failures only
 _RETRY_STATUS = {429, 500, 502, 503, 504, 529}
 
 
-async def fetch(client: httpx.AsyncClient, url: str) -> tuple[FetchStatus, str]:
+async def fetch(client: httpx.AsyncClient, url: str, timeout: float | None = None,
+                backoff: tuple[float, ...] | None = None) -> tuple[FetchStatus, str]:
     """GET with retries + backoff for network errors and 429/5xx. A real answer (200, 404, a bot-check
-    page) returns at once: retrying a bot check right away doesn't help."""
-    for attempt in range(len(BACKOFF) + 1):
+    page) returns at once: retrying a bot check right away doesn't help. `timeout` caps each attempt
+    (default: the client's); `backoff` sets the waits and so the number of retries."""
+    waits = BACKOFF if backoff is None else backoff
+    for attempt in range(len(waits) + 1):
         t = time.monotonic()
         try:
-            r = await client.get(url)
+            r = await (client.get(url, timeout=timeout) if timeout else client.get(url))
         except httpx.HTTPError as e:
             log.info("fetch ERROR %s (%s) %.1fs try %d", url[:160], type(e).__name__, time.monotonic() - t, attempt + 1)
-            if attempt < len(BACKOFF):
-                await asyncio.sleep(BACKOFF[attempt])
+            if attempt < len(waits):
+                await asyncio.sleep(waits[attempt])
                 continue
             return FetchStatus.ERROR, ""
         st = classify(r.status_code, r.text)
         log.log(logging.INFO if st != FetchStatus.OK else logging.DEBUG,
                 "fetch %s http=%s %dB %.1fs %s try %d", st.value, r.status_code, len(r.text),
                 time.monotonic() - t, url[:160], attempt + 1)
-        if r.status_code in _RETRY_STATUS and attempt < len(BACKOFF):
-            await asyncio.sleep(BACKOFF[attempt])
+        if r.status_code in _RETRY_STATUS and attempt < len(waits):
+            await asyncio.sleep(waits[attempt])
             continue
         return st, r.text
     return FetchStatus.ERROR, ""
