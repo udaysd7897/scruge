@@ -124,14 +124,19 @@ async def test_confirm_accepts_photo_plus_mrp_or_maker():
         return Candidate(Platform.MYNTRA, "https://www.myntra.com/x/12027436/buy", "Levis Men Soft Pure Cotton Tshirt",
                          Canonical(brand="levis", product_type="tee", colour="White", base_colour="white", gender="men",
                                    mrp=mrp, title="Levis Men Soft Pure Cotton Tshirt"), True, 500, image="https://i/x.jpg")
-    async def same(a, b):
-        return "SAME"
+    from test_confirm import picks
     async with httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, text=pdp))) as cl:
         # MRP differs between stores (Leriya ₹1,999 vs ₹999) but manufacturer + photo agree → confirmed
-        m = await confirm.confirm(cl, sp, decide(sp, [cand(999)]), vision=same)
+        m = await confirm.confirm(cl, sp, decide(sp, [cand(999)]), picker=picks("https://www.myntra.com/x/12027436/buy"))
         assert m.decision == Decision.MATCH
-        # photo not SAME → never confirmed, whatever else agrees
-        async def unsure(a, b):
-            return "UNSURE"
-        m = await confirm.confirm(cl, sp, decide(sp, [cand(649)]), vision=unsure)
+        # photo check unclear → never confirmed, whatever else agrees
+        m = await confirm.confirm(cl, sp, decide(sp, [cand(649)]), picker=picks())
         assert m.decision == Decision.AMBIGUOUS
+
+
+def test_model_name_made_searchable():
+    from app.extract import _amazon_model_name
+    assert _amazon_model_name({"Model Name": "Classic_3S_Tee_SMU"}) == "classic 3s tee"
+    assert _amazon_model_name({"Model Name": "JE9356"}) is None           # just the code
+    assert _amazon_model_name({"Model Name": "9930_Pack of 1"}) is None   # code + pack text
+    assert _amazon_model_name({"Model Name": "TAD ESSENTIAL | GYM_2891"}) == "tad essential"

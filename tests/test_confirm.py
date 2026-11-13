@@ -52,53 +52,65 @@ def client():
     return httpx.AsyncClient(transport=httpx.MockTransport(lambda r: httpx.Response(200, text=PDP)))
 
 
+def picks(url=None, none=False):
+    """Fake one-call photo check: a clean table for the candidate with `url`, a named difference for the
+    others ("none" when none=True, an unclear table when url is None and not none)."""
+    async def picker(src, cands):
+        rows, ans = {}, ("none" if none else "unclear")
+        for i, c in enumerate(cands, 1):
+            hit = url is not None and c.url == url
+            rows[str(i)] = {a: "same" for a in ("neck", "sleeve", "colour", "logo", "stripes", "print")}
+            if not hit and (none or url is not None):
+                rows[str(i)]["print"] = "different"
+            if url is None and not none:
+                rows[str(i)]["print"] = "unclear"
+            if hit:
+                ans = i
+        return {"table": rows, "match": ans}
+    return picker
+
+
 async def test_all_signals_agree_confirms():
     s, c = src(), myntra()
-    async def same(a, b):
-        return "SAME"
     async with client() as cl:
-        m = await confirm.confirm(cl, s, decide(s, [c]), vision=same)
+        m = await confirm.confirm(cl, s, decide(s, [c]), picker=picks(MY_URL))
     assert m.decision == Decision.MATCH and m.candidate.url == MY_URL
     assert "name, MRP, manufacturer and photo" in m.reason
 
 
-async def test_photo_different_or_unsure_stays_possible():
+async def test_photo_unclear_stays_possible_and_clean_none_is_not_listed():
     s = src()
-    for verdict in ("DIFFERENT", "UNSURE"):
-        async def v(a, b, verdict=verdict):
-            return verdict
-        async with client() as cl:
-            m = await confirm.confirm(cl, s, decide(s, [myntra()]), vision=v)
+    async with client() as cl:
+        m = await confirm.confirm(cl, s, decide(s, [myntra()]), picker=picks())
         assert m.decision == Decision.AMBIGUOUS
+        m = await confirm.confirm(cl, s, decide(s, [myntra()]), picker=picks(none=True))
+        assert m.decision == Decision.NONE and m.none_had == "the same design in its photo"
 
 
 async def test_mrp_and_maker_mismatch_is_not_confirmed():
-    # option 2 (2026-11-13): photo SAME + (MRP equal or same manufacturer). Neither agreeing → not confirmed
+    # option 2 (2026-11-13): photo match + (MRP equal or same manufacturer). Neither → Possible, linked to it
     s = src()
     s.canon.maker = "some other maker plot 1 delhi 110001"
-    async def same(a, b):
-        return "SAME"
     async with client() as cl:
-        m = await confirm.confirm(cl, s, decide(s, [myntra(mrp=2299)]), vision=same)
-    assert m.decision == Decision.AMBIGUOUS
+        m = await confirm.confirm(cl, s, decide(s, [myntra(mrp=2299)]), picker=picks(MY_URL))
+    assert m.decision == Decision.AMBIGUOUS and m.candidate.url == MY_URL
 
 
 async def test_mrp_mismatch_with_same_maker_and_photo_is_confirmed():
     s = src()
-    async def same(a, b):
-        return "SAME"
     async with client() as cl:
-        m = await confirm.confirm(cl, s, decide(s, [myntra(mrp=2299)]), vision=same)
+        m = await confirm.confirm(cl, s, decide(s, [myntra(mrp=2299)]), picker=picks(MY_URL))
     assert m.decision == Decision.MATCH
 
 
-async def test_two_colour_siblings_both_same_is_ambiguous():
+async def test_two_colour_siblings_both_clean_is_ambiguous():
     s = src()
     a, b = myntra(), myntra(url=MY_URL.replace("35720668", "35720666"))
-    async def same(x, y):
-        return "SAME"
+    async def both_clean(src_, cands):
+        return {"table": {str(i): {x: "same" for x in ("neck", "sleeve", "colour", "logo", "stripes", "print")}
+                          for i in range(1, len(cands) + 1)}, "match": 1}
     async with client() as cl:
-        m = await confirm.confirm(cl, s, decide(s, [a, b]), vision=same)
+        m = await confirm.confirm(cl, s, decide(s, [a, b]), picker=both_clean)
     assert m.decision == Decision.AMBIGUOUS
 
 

@@ -146,7 +146,13 @@ def _amazon_model_name(at: dict[str, str]) -> str | None:
     """Amazon's "Model Name" for fashion is the brand line name ("TAD ESSENTIAL | GYM_2891"): a search
     hint, never identity. A code-like value is not a line name."""
     v = re.split(r"\|", at.get("Model Name") or "")[0].strip()
-    return v.lower() if v and not style_code_like(v) else None
+    if not v or style_code_like(v) or style_code_like(v.split("_")[0]) or re.search(r"pack of", v, re.I):
+        return None  # the code itself ("JE9356", "9930_Pack of 1") is not a name
+    words = [w for w in re.split(r"[_\s]+", v.lower()) if w and w not in _MODEL_NAME_TAGS]
+    return " ".join(words) or None
+
+
+_MODEL_NAME_TAGS = {"smu", "nos", "ss", "aw", "fw", "core"}  # internal season/channel tags in brand line names
 
 
 def norm_maker(s: str | None) -> str | None:

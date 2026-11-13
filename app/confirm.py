@@ -1,10 +1,10 @@
-"""Confirm a no-code apparel match (Myntra shows no brand style code). A survivor is confirmed only when
-its MRP equals Amazon's, its product page names the same manufacturer, and the photo check says SAME.
-Exactly one confirmed survivor → MATCH; anything else leaves the result as Possible match."""
+"""Confirm a no-code apparel match (Myntra shows no brand style code): one photo-check call picks among the
+top survivors; a confident result also needs MRP or the manufacturer to agree (user's option 2)."""
 from __future__ import annotations
 
-import asyncio
+import random
 import re
+from dataclasses import replace
 
 import httpx
 
@@ -12,9 +12,8 @@ from app.extract import myntra_pdp_maker
 from app.matcher import Match, decide, score
 from app.models import Category, Decision, FetchStatus, Platform, SourceProduct
 from app.sources.http import fetch
-from app.vision import same_product
+from app.vision import PICK_MAX, judge, pick
 
-TOP = 3
 
 
 def same_maker(a: str | None, b: str | None) -> bool:
@@ -31,28 +30,32 @@ def same_maker(a: str | None, b: str | None) -> bool:
     return len(short & long_) / len(short) >= 0.8
 
 
-async def _passes(client, src: SourceProduct, cand, vision) -> bool:
-    s, c = src.canon, cand.canon
-    mrp_ok = bool(s.mrp and c.mrp and s.mrp == c.mrp)
-    maker_ok = False
-    if s.maker and cand.platform == Platform.MYNTRA:
-        st, html = await fetch(client, cand.url)
-        maker_ok = st == FetchStatus.OK and same_maker(s.maker, myntra_pdp_maker(html))
-    # sellers price differently per store (Leriya ₹1,999 vs ₹999): the photo is required, plus MRP or maker
-    if not (mrp_ok or maker_ok):
+async def _maker_ok(client, src: SourceProduct, cand) -> bool:
+    if not (src.canon.maker and cand.platform == Platform.MYNTRA):
         return False
-    return await vision(src, cand) == "SAME"
+    st, html = await fetch(client, cand.url)
+    return st == FetchStatus.OK and same_maker(src.canon.maker, myntra_pdp_maker(html))
 
 
-async def confirm(client: httpx.AsyncClient, src: SourceProduct, m: Match, vision=same_product) -> Match:
+async def confirm(client: httpx.AsyncClient, src: SourceProduct, m: Match, picker=pick) -> Match:
+    """One photo-check call over the top survivors (shuffled; the table must back the answer):
+    match k + (MRP equal or same manufacturer) → MATCH; match k alone → Possible, linked to k;
+    a clean "none" → NONE (Not listed); unclear/no key/error → unchanged (Possible)."""
     if src.category != Category.APPAREL or m.decision != Decision.AMBIGUOUS or src.missing_required:
         return m
-    # equal MRP first (Levi's: ₹649 on both), then score; MRP is checked again in _passes
     mrp = src.canon.mrp
-    top = sorted(m.survivors, key=lambda c: (not (mrp and c.canon.mrp == mrp), -score(src.canon, c, src.category)))[:TOP]
-    ok = await asyncio.gather(*(_passes(client, src, c, vision) for c in top))
-    passed = [c for c, good in zip(top, ok) if good]
-    if len(passed) != 1:
+    top = sorted(m.survivors, key=lambda c: (not (mrp and c.canon.mrp == mrp),
+                                             -score(src.canon, c, src.category)))[:PICK_MAX]
+    shuffled = top[:]
+    random.Random(src.asin or src.title).shuffle(shuffled)  # no listing is always "1"; reproducible per item
+    verdict, k = judge(await picker(src, shuffled), len(shuffled))
+    if verdict == "none":
+        return Match(Decision.NONE, None, "photo", survivors=[], src=m.src, category=m.category,
+                     checked=len(shuffled), none_had="the same design in its photo")
+    if verdict != "match":
         return m
-    passed[0].confirmed = True
-    return decide(src, [passed[0]])
+    cand = shuffled[k]
+    if (mrp and cand.canon.mrp == mrp) or await _maker_ok(client, src, cand):
+        cand.confirmed = True
+        return decide(src, [cand])
+    return replace(m, candidate=cand, reason="Photo matches, but neither MRP nor manufacturer confirms it")
