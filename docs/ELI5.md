@@ -76,11 +76,13 @@ rather than claiming a match.
 
 ### Getting the page
 
-1. The app first fetches the Amazon product page directly, with a normal browser-like request.
-2. If Amazon shows a bot check, or the page can't be read, the app falls back to
-   **Apify's Amazon scraper** (a paid service, needs `APIFY_KEY`). Answers from Apify are cached on
-   disk, so the same product isn't paid for twice.
-3. The app **never tries to get around a bot check**. If both routes fail, the result is
+1. **A saved Apify answer** for this product, if one exists (free). Apify answers are cached on disk
+   and have more fields than the app's own page reader, so they're preferred.
+2. **The Amazon product page itself** (free), fetched with a normal browser-like request and read by
+   the app's own page reader. Most lookups end here.
+3. **Apify's Amazon scraper, live** (paid, needs `APIFY_KEY`). Used only when Amazon shows a bot
+   check or the page can't be read as a product. Its answer is cached for next time.
+4. The app **never tries to get around a bot check**. If every route fails, the result is
    "Couldn't check".
 
 ### Working out the category
