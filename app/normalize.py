@@ -202,6 +202,27 @@ def base_colour(s: str | None) -> str | None:
     if s is None:
         return None
     s = re.sub(r"\(.*?\)", " ", s)  # "White(Light Grey Mel)": the bracket describes a trim, not the colour
+    hit = _base_colour_words(s)
+    if hit or " " in s.strip() or len(s.strip()) > 12:
+        return hit
+    return _colour_abbreviation(s)
+
+
+_COLOUR_ABBR = [("lgtgre", "grey"), ("gre", "grey"), ("gry", "grey"), ("blk", "black"), ("wht", "white"),
+                ("nvy", "navy"), ("nav", "navy"), ("blu", "blue"), ("grn", "green"), ("ylw", "yellow"),
+                ("pnk", "pink"), ("brn", "brown"), ("org", "orange"), ("mar", "maroon"), ("red", "red")]
+
+
+def _colour_abbreviation(s: str) -> str | None:
+    """Brand colour codes in one token ("LGTGRE", "BLK"): last-resort mapping."""
+    t = re.sub(r"[^a-z]", "", s.lower())
+    for abbr, base in _COLOUR_ABBR:
+        if abbr in t:
+            return base
+    return None
+
+
+def _base_colour_words(s: str) -> str | None:
     for segment in re.split(r"[/\-,&]+", s.lower()):
         segment = " ".join(re.findall(r"[a-z]+", segment))
         for phrase, base in COLOUR_PHRASES.items():
@@ -334,3 +355,34 @@ def product_type(title: str | None, breadcrumbs: str | None) -> str | None:
             if rx.search(t):
                 return name
     return None
+
+
+_NECK = [  # first match wins; order matters ("collarless" before "collar")
+    ("round", r"collarless|no[\s-]collar|without collar"),
+    ("mandarin", r"mandarin|chinese collar|band collar"),
+    ("henley", r"henley"),
+    ("hooded", r"hood(ed|ie)?\b"),
+    ("v", r"\bv[\s-]?neck"),
+    ("collar", r"\bpolo\b|collar"),
+    ("round", r"round[\s-]?neck|crew[\s-]?neck|\bcrew\b"),
+]
+
+
+def neck_type(text: str | None) -> str | None:
+    """Neckline/collar stated in text, or None when the text doesn't say (never guessed)."""
+    t = (text or "").lower()
+    for name, rx in _NECK:
+        if re.search(rx, t):
+            return name
+    return None
+
+
+_TOP_KINDS = {"t_shirt", "tshirt", "tshirts", "t-shirts", "polo", "polos", "polo_t_shirt", "vest", "vests",
+              "innerwear vests", "jersey", "jerseys", "sports_jersey", "lounge tshirts", "tops"}
+
+
+def store_kind(label: str | None) -> str | None:
+    """A store's own product label (Flipkart JSON-LD category, Myntra articleType) → "top" or "other"."""
+    if not label:
+        return None
+    return "top" if label.strip().lower() in _TOP_KINDS else "other"

@@ -53,6 +53,8 @@ class Canonical:
     model_name: str | None = None  # brand's line name when the listing states it ("tad essential")
     official_name: str | None = None  # brand-site product name looked up by style code
     gender: str | None = None  # men / women / kids
+    neck: str | None = None  # collar / mandarin / round / v / henley / hooded (None = unknown)
+    kind: str | None = None  # store's own product kind: "top" (tee/polo/vest/jersey) or "other" (watch, shirt, slides)
     mrp: int | None = None
     maker: str | None = None  # manufacturer text, normalised (Amazon "Manufacturer", Myntra manufacturerInfo)
     product_type: str | None = None

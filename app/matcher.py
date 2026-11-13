@@ -49,12 +49,18 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
         if _both(src.screen_in, c.screen_in) and abs(src.screen_in - c.screen_in) > 1:
             return "screen size"
     if cat in (Category.SNEAKER, Category.APPAREL):
+        # hard gates (reports/Reliable apparel matching like Google.md): reject only when both sides
+        # are known and differ; "unknown" never rejects
+        if cat == Category.APPAREL and c.kind == "other":
+            return "category"  # the store files it as a watch, slides, a shirt ...
         if _both(src.gender, c.gender) and "unisex" not in (src.gender, c.gender) and src.gender != c.gender:
             return "gender"
+        if cat == Category.APPAREL and _both(src.neck, c.neck) and src.neck != c.neck:
+            return "neck"  # collar vs round neck is a different product (only colour/size/pattern vary)
         if cat == Category.APPAREL and _both(src.product_type, c.product_type) \
-                and src.product_type != c.product_type:
-            return "type"
-        if _both(src.style_code, c.style_code) and not same_style(src, c):
+                and src.product_type != c.product_type and {src.product_type, c.product_type} != {"tee", "polo"}:
+            return "type"  # tee vs polo is decided by the neck gate (a "collared T-shirt" is a polo)
+        if _both(src.style_code, c.style_code) and not same_style(src, c) and _code_brand(src, c):
             return "style code"
         if _both(src.base_colour, c.base_colour) and src.base_colour != c.base_colour:
             return "colour"
@@ -66,6 +72,16 @@ def veto(src: Canonical, cand: Candidate, cat: Category) -> str | None:
                 and _distinct_veto(src, cand):
             return "distinctive words"
     return None
+
+
+# brands whose style codes are the brand's own and the same on every store: a different code means a
+# different product. Other brands' "codes" are often seller SKUs (Bewakoof 1053011): equal proves, unequal
+# says nothing.
+CODE_BRANDS = {"puma", "nike", "adidas", "reebok", "skechers", "asics", "new balance", "jockey", "ausk"}
+
+
+def _code_brand(a: Canonical, b: Canonical) -> bool:
+    return norm_brand(a.brand) in CODE_BRANDS or norm_brand(b.brand) in CODE_BRANDS
 
 
 def same_style(a: Canonical, b: Canonical) -> bool:

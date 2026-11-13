@@ -8,7 +8,7 @@ from html import unescape
 from app.models import Candidate, Canonical, Category, Platform, SourceProduct
 from app.normalize import (
     base_colour, clean_ean, is_accessory, model_line, norm_brand, norm_family, parse_gb, parse_ram_storage,
-    product_type, screen_inches, tv_family,
+    neck_type, product_type, screen_inches, store_kind, tv_family,
 )
 
 REQUIRED: dict[Category, list[str]] = {
@@ -166,6 +166,22 @@ def _gender(s: str | None) -> str | None:
     return "kids" if re.search(r"\b(kids?|boys?|girls?)\b", s) else None
 
 
+def _amazon_neck(item: dict, at: dict[str, str]) -> str | None:
+    """Neckline: the title first (most specific), then Amazon's neck fields; fields that contradict each
+    other ("Collar Style: classic collar" + "Neck Style: Round Neck" on a crew-neck Levi's) mean unknown.
+    Bullets/description last. Text beats image (image neckline accuracy is 15-48%)."""
+    n = neck_type(item.get("title"))
+    if n:
+        return n
+    fields = {neck_type(at.get(k)) for k in ("Neck Style", "Neck Type", "Collar Style")} - {None}
+    if len(fields) == 1:
+        return fields.pop()
+    if len(fields) > 1:
+        return None
+    text = " ".join(str(x) for x in (item.get("features") or []) if x) + " " + str(item.get("description") or "")
+    return neck_type(text)
+
+
 def _amazon_tv_code(at: dict[str, str], screen_in: int | None) -> str | None:
     for k in ("Model Number", "Manufacturer Part Number", "Model Name", "Item model number"):
         code = model_code_like(at.get(k), screen_in)
@@ -259,6 +275,7 @@ def from_amazon(item: dict) -> SourceProduct:
         style_code=_amazon_style(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
         model_name=_amazon_model_name(at) if cat in (Category.SNEAKER, Category.APPAREL) else None,
         gender=_gender(at.get("Department")) if cat in (Category.SNEAKER, Category.APPAREL) else None,
+        neck=_amazon_neck(item, at) if cat == Category.APPAREL else None,
         # no strike-through list price means the product isn't discounted: the price is the MRP
         mrp=int((item.get("listPrice") or {}).get("value") or (item.get("price") or {}).get("value") or 0) or None,
         maker=norm_maker(at.get("Manufacturer Contact Information") or at.get("Manufacturer")),
@@ -351,7 +368,7 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     p = prods[0]
     toks = _tokens(html)
     labels = ("Model Number", "Model Name", "RAM", "Internal Storage", "Color", "Display Size",
-              "Style Code", "Article Number")
+              "Style Code", "Article Number", "Type", "Neck")
     spec: dict[str, str] = {}
     for i, t in enumerate(toks[:-1]):
         if t in labels and t not in spec:
@@ -397,6 +414,9 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
         colour=colour, base_colour=base_colour(colour),
         product_type=product_type(p.get("name"), None) if fk_cat == Category.APPAREL else None,
         style_code=style,
+        neck=(neck_type(spec.get("Neck")) or neck_type(spec.get("Type")) or neck_type(title))
+        if fk_cat == Category.APPAREL else None,
+        kind=store_kind(str(p.get("category") or "") or None),
         title=title,
     )
     price = offers.get("price")
@@ -431,6 +451,8 @@ def from_myntra_search(html: str) -> list[Candidate]:
                           else product_type(name, None) or _MYNTRA_TYPES.get(art)),
             gender=_gender(p.get("gender")),
             mrp=int(p["mrp"]) if p.get("mrp") else None,
+            neck=neck_type(name),
+            kind=store_kind((p.get("articleType") or {}).get("typeName")),
             title=name,
         )
         inv = [x for x in p.get("inventoryInfo") or [] if isinstance(x, dict)]

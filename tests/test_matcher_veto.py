@@ -37,7 +37,11 @@ def test_sneaker_apparel():
     polo = Canonical(brand="puma", product_type="polo", base_colour="black", title="Puma Men Essentials Logo Slim Fit Polo Black")
     assert veto(polo, cand(brand="puma", product_type="polo", base_colour="black", title="Puma Men Graphic Regular Fit Polo Black"), APPAREL) == "distinctive words"
     assert veto(polo, cand(brand="puma", product_type="polo", base_colour="black", title="PUMA Essentials Logo Slim Fit Polo T-Shirt", pack_count=2), APPAREL) == "pack count"
-    assert veto(polo, cand(brand="puma", product_type="tee", base_colour="black"), APPAREL) == "type"
+    # polo vs tee is decided by the neck gate now (a "collared T-shirt" is a polo): known necks that differ reject
+    assert veto(polo, cand(brand="puma", product_type="tee", base_colour="black"), APPAREL) != "type"
+    from dataclasses import replace
+    assert veto(replace(polo, neck="collar"), cand(brand="puma", product_type="tee", base_colour="black", neck="round"),
+                APPAREL) == "neck"
     assert veto(polo, cand(brand="puma", product_type="polo", base_colour="black", title="PUMA Essentials Logo Slim Fit Polo T-Shirt"), APPAREL) is None
 
 
