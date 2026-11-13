@@ -140,3 +140,15 @@ def test_model_name_made_searchable():
     assert _amazon_model_name({"Model Name": "JE9356"}) is None           # just the code
     assert _amazon_model_name({"Model Name": "9930_Pack of 1"}) is None   # code + pack text
     assert _amazon_model_name({"Model Name": "TAD ESSENTIAL | GYM_2891"}) == "tad essential"
+
+
+def test_seller_sku_model_name_is_not_a_query():
+    from app.extract import _amazon_model_name
+    assert _amazon_model_name({"Model Name": "LF-M.T-Shirt-DP-MT1213"}) is None
+
+
+def test_apparel_ladder_always_has_brand_noun_colour():
+    from app.models import Platform
+    from app.queries import ladder
+    sp = amz("B0HCW2KFCR")
+    assert "leriya fashion t-shirt brown" in ladder(sp, Platform.MYNTRA)

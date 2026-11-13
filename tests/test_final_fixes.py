@@ -41,7 +41,8 @@ def test_amazon_apparel_has_product_type_and_ladder():
     assert (sp.canon.brand, sp.canon.product_type, sp.canon.base_colour) == ("allen solly", "polo", "navy")
     assert sp.missing_required == []
     assert ladder(sp, FLIPKART) and ladder(sp, MYNTRA)
-    assert ladder(sp, MYNTRA)[0].startswith("allen solly polo navy")
+    q = ladder(sp, MYNTRA)  # brand + product noun + colour first, then brand + type + colour + words
+    assert q[0] == "allen solly polo t-shirt navy" and any(r.startswith("allen solly polo navy") for r in q)
 
 
 def test_apparel_ladder_never_empty_with_brand():

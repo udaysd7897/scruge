@@ -53,6 +53,10 @@ def ladder(src: SourceProduct, platform: Platform) -> list[str]:
             rungs.append(_join(c.brand, c.official_name))
         if c.model_name:
             rungs.append(_join(c.brand, c.model_name, c.base_colour, "t-shirt"))
+        # the plain brand + product noun + colour search: finds what model-word queries miss
+        # (Leriya: only "leriya fashion t-shirt brown" returns the listing)
+        noun = {"tee": "t-shirt", "polo": "polo t-shirt", "jersey": "jersey"}.get(c.product_type or "", "t-shirt")
+        rungs.append(_join(c.brand, noun, c.base_colour))
         base = _join(c.brand, c.product_type, c.base_colour)
         if base:
             extra = _distinct_in_order(c.title or src.title, c.brand)
