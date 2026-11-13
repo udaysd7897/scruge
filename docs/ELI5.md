@@ -79,6 +79,14 @@ Saying "they don't have it" when we never looked would be a fib.
 - **No shared code (Myntra apparel):** matched by name only is never enough. `confirm.py` requires
   equal MRP, the same manufacturer on the Myntra product page, and a SAME verdict from a photo
   comparison (needs `ANTHROPIC_API_KEY`), with exactly one survivor passing. Otherwise "Possible match".
+- **Sneakers** (reports/Sneaker cross store matching.md):
+  - **Model:** taken from Amazon's Model Name ("Stride Eclipse") or a short model number ("SM-734").
+  - **Brand:** taken from the title when Amazon's record has none.
+  - **Gender:** read from Department, the title and the breadcrumb. When they disagree, it counts as unknown and never rejects.
+  - **Colours:** compared as a set, with sole words like "gum" ignored. "Black and White" equals "White, Black" but not "Grey, White".
+  - **Indian-brand codes** match on their number: Sparx SM-734 = Flipkart SD0734G.
+  - **Different codes from brands whose codes we don't trust** (Bacca) fall back to comparing title words.
+  - **No shared code:** a shoe photo check (silhouette, panels, logo, upper colour, accents, sole, laces), plus equal MRP or the same manufacturer. Flipkart's MRP and manufacturer are now read from the product page.
 - **Closest options:** when listings pass every hard check but the photo check shows none has the same
   design, the status stays "Not listed" and up to 3 closest listings are shown under it, fewest
   differences first, each with what differs (e.g. "logo, print differ"). If nothing passed the hard

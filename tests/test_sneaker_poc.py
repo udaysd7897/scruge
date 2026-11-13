@@ -89,3 +89,24 @@ def test_unequal_untrusted_codes_fall_back_to_title_words():
     assert veto(src, matrix, S) == "distinctive words"
     stride = fk("bacca bucci Stride Eclipse: Low-Top For Men", "Black, White", None, brand="bacca bucci")
     assert veto(src, stride, S) is None
+
+
+def test_flipkart_mrp_from_price_block():
+    # Flipkart's MRP lets the photo check confirm a no-code listing (Bacca Stride Eclipse 2999 = Amazon 2999)
+    from app.extract import _FK_MRP
+    html = '..."ppd":{"fsp":1599,"finalPrice":1599,"mrp":2999,"nepPrice":1359,"specialPrice":true},...'
+    assert _FK_MRP.search(html).group(1) == "2999"
+
+
+def test_flipkart_shoe_page_reads_as_sneaker_with_mrp_maker_gender():
+    # JSON-LD category "shoe" (title has no "shoe"/"sneaker"), label "Ideal for", "Name and address of the
+    # Manufacturer": price + maker confirm the Stride Eclipse listing against Amazon
+    from app.confirm import same_maker
+    from app.extract import from_flipkart_page
+    html = (FX / "fk_bacca_stride_eclipse.html").read_text(encoding="utf-8", errors="ignore")
+    c = from_flipkart_page(html, "https://www.flipkart.com/x/p/itm9a823e41ec865?pid=SHOGZJZURF59V3FH")[0]
+    k = c.canon
+    assert (k.gender, k.mrp, k.family) == ("men", 2999, "stride eclipse low top") and c.image
+    src = amz("amz_bacca_B0CVF22V83").canon
+    assert same_maker(src.maker, k.maker) and src.mrp == k.mrp
+    assert veto(src, c, S) is None and same_style(src, k)

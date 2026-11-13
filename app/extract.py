@@ -392,9 +392,12 @@ _FK_STATE_SPEC = re.compile(
 
 # Flipkart's own JSON-LD category: "JOCKEY Men Vest" says nothing about clothing, its category "vest" does
 _FK_LD_CATEGORY = {"t_shirt": Category.APPAREL, "vest": Category.APPAREL, "polo": Category.APPAREL,
-                   "jersey": Category.APPAREL, "mobile": Category.PHONE, "television": Category.TV}
+                   "jersey": Category.APPAREL, "mobile": Category.PHONE, "television": Category.TV,
+                   "shoe": Category.SNEAKER, "shoes": Category.SNEAKER, "sneaker": Category.SNEAKER}
 
 
+# the product's own price block: "ppd":{"fsp":1599,"finalPrice":1599,"mrp":2999,...} (one per page)
+_FK_MRP = re.compile(r'"ppd":\{[^{}]*?"mrp":(\d+)')
 _FK_SHOWN = re.compile(r'"prependingText":"((?:[^"\\]|\\.)+)"')
 
 
@@ -418,7 +421,8 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
     p = prods[0]
     toks = _tokens(html)
     labels = ("Model Number", "Model Name", "RAM", "Internal Storage", "Color", "Display Size",
-              "Style Code", "Article Number", "Type", "Neck", "Ideal For")
+              "Style Code", "Article Number", "Type", "Neck", "Ideal For", "Ideal for", "Model name",
+              "Name and address of the Manufacturer")
     spec: dict[str, str] = {}
     for i, t in enumerate(toks[:-1]):
         if t in labels and t not in spec:
@@ -451,7 +455,7 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
             # "Sparx SM 734 | Stylish ... For Men (White , 9)": the bracket is colour + size
             title = re.sub(r"\s*\([^()]*,\s*[\d.]+\s*\)\s*$", "", title)
             style = sneaker_code_like(spec.get("Style Code") or spec.get("Article Number"))
-            fam = model_line(re.split(r"[|:]", spec.get("Model Name") or title)[0], brand)
+            fam = model_line(re.split(r"[|:]", spec.get("Model Name") or spec.get("Model name") or title)[0], brand)
         else:
             style = style_code_like(spec.get("Style Code") or spec.get("Article Number"))
             fam = model_line(spec.get("Model Name") or title, brand)
@@ -473,7 +477,10 @@ def from_flipkart_page(html: str, url: str) -> list[Candidate]:
         neck=(neck_type(spec.get("Neck")) or neck_type(spec.get("Type")) or neck_type(title))
         if fk_cat == Category.APPAREL else None,
         kind=store_kind(str(p.get("category") or "") or None),
-        gender=agreed_audience(spec.get("Ideal For"), title) if fk_cat == Category.SNEAKER else None,
+        gender=(agreed_audience(spec.get("Ideal For") or spec.get("Ideal for"), title)
+                if fk_cat == Category.SNEAKER else None),
+        maker=norm_maker(spec.get("Name and address of the Manufacturer")),
+        mrp=int(mm.group(1)) if (mm := _FK_MRP.search(html)) else None,
         title=title,
     )
     price = offers.get("price")

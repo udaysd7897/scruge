@@ -33,7 +33,11 @@ def same_maker(a: str | None, b: str | None) -> bool:
 
 
 async def _maker_ok(client, src: SourceProduct, cand) -> bool:
-    if not (src.canon.maker and cand.platform == Platform.MYNTRA):
+    if not src.canon.maker:
+        return False
+    if cand.canon.maker:  # Flipkart shows it on the product page we already read
+        return same_maker(src.canon.maker, cand.canon.maker)
+    if cand.platform != Platform.MYNTRA:
         return False
     st, html = await fetch(client, cand.url)
     return st == FetchStatus.OK and same_maker(src.canon.maker, myntra_pdp_maker(html))
