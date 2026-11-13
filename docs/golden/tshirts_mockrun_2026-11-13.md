@@ -24,9 +24,9 @@ Algorithm: main @ 22527a9. Amazon via Apify (new key), total spend $0.045. Truth
 | 3 Leriya | Not listed | <https://www.myntra.com/tshirts/leriya+fashion/leriya-fashion-men-organic-cotton-t-shirt/38443941/buy> (exact; MRP differs ₹1,999 vs ₹999) |
 | 4 AUSK | <https://www.flipkart.com/ausk-printed-men-round-neck-maroon-white-t-shirt/p/itma5227395b62a8?pid=TSHHZFA6CJKTGABG> | app's 33976198 is a different print; exact not found |
 
-## User verdicts on rerun (2026-11-13, after commit 2c3238d)
+## User verdicts on rerun (2026-11-13, after commit 2c3238d) — these override the truth table above
 
 | # | Flipkart result | Verdict |
 |---|---|---|
-| 2 Jockey | <https://www.flipkart.com/jockey-men-vest/p/itmc2836705003ba?pid=TSHFYFK4GWFEMHDD> | Same product, **different colour** (the white one is TSHFFTREMEHZDKEU) |
-| 4 AUSK | <https://www.flipkart.com/ausk-printed-men-round-neck-maroon-t-shirt/p/itm5917afb9f56f2?pid=TSHHK46GDCBNUWC5> | **Correct** (also TSHHZFA6CJKTGABG) |
+| 2 Jockey | <https://www.flipkart.com/jockey-men-vest/p/itmc2836705003ba?pid=TSHFYFK4GWFEMHDD> | **Correct** (same product; colour differs, so "Possible match – verify" is the right label). Supersedes the earlier truth link |
+| 4 AUSK | <https://www.flipkart.com/ausk-printed-men-round-neck-maroon-t-shirt/p/itm5917afb9f56f2?pid=TSHHK46GDCBNUWC5> | **Correct**. Supersedes the earlier truth link TSHHZFA6CJKTGABG |
